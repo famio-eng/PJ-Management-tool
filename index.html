@@ -448,6 +448,19 @@ const SAMPLE_TASKS = [
 // =====================================================================
 const DEPTS = ['Pj-L','RA','工場','EL','SW','VV','BRT','PRM','PDA','Service','Market','IP'];
 
+const DEPT_COLORS = {
+  'Pj-L':'#4472C4','RA':'#ED7D31','工場':'#A9D18E','EL':'#FF0000',
+  'SW':'#9DC3E6','VV':'#7030A0','BRT':'#FFD966','PRM':'#F4B183',
+  'PDA':'#00B0F0','Service':'#92D050','Market':'#FF66CC','IP':'#C9C9C9'
+};
+
+function getDeptColor(resource) {
+  if (!resource) return '#4472C4';
+  const depts = resource.split(',').map(s => s.trim()).filter(s => s);
+  if (depts.length > 1) return '#808080';
+  return DEPT_COLORS[depts[0]] || '#4472C4';
+}
+
 // =====================================================================
 // APP STATE
 // =====================================================================
@@ -802,19 +815,28 @@ function renderTimeline() {
   const months6 = 6, months12 = 12, months18 = 18;
   let showMonths = state.tlMonths || 12;
 
+  const deptLegend = Object.entries(DEPT_COLORS).map(([dept, color]) =>
+    `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;white-space:nowrap">
+      <span style="width:13px;height:8px;background:${color};border-radius:2px;display:inline-block;opacity:.85;flex-shrink:0"></span>${dept}</span>`
+  ).join('');
+
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-bottom:10px">
       <div class="tl-controls">
         <span style="font-size:12px;color:#666">表示期間:</span>
         ${[6,12,18].map(m => `<button class="btn btn-sm ${showMonths===m?'btn-primary':'btn-outline'}" onclick="setTLMonths(${m})">${m}ヶ月</button>`).join('')}
-        <span style="flex:1"></span>
-        <button class="btn btn-sm btn-secondary" onclick="openModal('tl-item-modal')">＋ アイテム追加</button>
       </div>
-      <div style="font-size:11px;color:#888">
-        <span style="display:inline-block;width:14px;height:8px;background:#4472C4;border-radius:2px;vertical-align:middle;margin-right:4px;opacity:.8"></span>基準計画バー
-        <span style="display:inline-block;width:14px;height:8px;background:#FFC000;border-radius:2px;vertical-align:middle;margin-right:4px;opacity:.8"></span>予測バー
-        <span style="display:inline-block;width:12px;height:12px;background:#e53935;transform:rotate(45deg);vertical-align:middle;margin-right:4px"></span>マイルストーン
-        <span style="display:inline-block;width:2px;height:14px;background:orange;vertical-align:middle;margin-right:4px"></span>TODAY
+      <div style="font-size:11px;color:#888;line-height:2">
+        <span style="font-weight:600;margin-right:4px">基準計画バー（部門別）:</span>${deptLegend}
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 10px 4px 0">
+          <span style="width:13px;height:8px;background:#808080;border-radius:2px;display:inline-block;opacity:.85"></span>複数部門</span>
+        <br>
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
+          <span style="width:13px;height:6px;background:#A0A0A0;border-radius:2px;display:inline-block;opacity:.75"></span>実進捗バー</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
+          <span style="width:11px;height:11px;background:#e53935;transform:rotate(45deg);display:inline-block"></span>&nbsp;マイルストーン</span>
+        <span style="display:inline-flex;align-items:center;gap:3px">
+          <span style="width:2px;height:14px;background:orange;display:inline-block"></span>TODAY</span>
       </div>
     </div>
     <div class="section" style="padding:12px">
@@ -845,20 +867,22 @@ function drawTimeline(showMonths) {
     ...tlTasks.map(t => ({
       name: t.name,
       bstart: toDate(t.bstart), bend: toDate(t.bend),
-      fstart: toDate(t.start),  fend:  toDate(t.end),
+      astart: toDate(t.astart), aend: toDate(t.aend),
       isMilestone: t.duration === '0 days',
       status: t.status,
       level: t.level,
+      resource: t.resource || '',
       source: 'auto',
       color: null,
     })),
     ...manualItems.map(m => ({
       name: m.name,
       bstart: toDate(m.date || m.start), bend: toDate(m.end || m.date),
-      fstart: null, fend: null,
+      astart: null, aend: null,
       isMilestone: m.type === 'milestone',
       status: null,
       level: 3,
+      resource: '',
       source: 'manual',
       color: m.color,
     })),
@@ -930,35 +954,32 @@ function drawTimeline(showMonths) {
           .text(row.name);
       }
     } else {
-      // Base plan bar
+      const barH = row.level <= 2 ? 14 : 10;
+      const barY = (rowH - barH) / 2;
+      // Base plan bar (dept color)
       if (row.bstart && row.bend) {
         const x1 = Math.max(0, xScale(row.bstart));
         const x2 = Math.min(innerW, xScale(row.bend));
         if (x2 > x1) {
-          const barH = row.level <= 2 ? 14 : 10;
-          const barY = (rowH - barH) / 2;
-          const color = row.color || (row.level <= 2 ? '#4472C4' : '#4472C4');
+          const color = row.color || getDeptColor(row.resource);
           rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
             .attr('fill', color).attr('opacity', row.level <= 2 ? .85 : .7).attr('rx', 2)
-            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}`))
+            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}`))
             .on('mouseout', hideTooltip);
         }
       }
-      // Forecast bar (if differs from baseline)
-      if (row.fstart && row.fend) {
-        const bs = row.bstart?.getTime(), be = row.bend?.getTime();
-        const fs = row.fstart?.getTime(), fe = row.fend?.getTime();
-        if (bs !== fs || be !== fe) {
-          const x1 = Math.max(0, xScale(row.fstart));
-          const x2 = Math.min(innerW, xScale(row.fend));
-          if (x2 > x1) {
-            const barH = row.level <= 2 ? 8 : 6;
-            const barY = (rowH - barH) / 2 + (row.level <= 2 ? 3 : 2);
-            rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
-              .attr('fill', '#FFC000').attr('opacity', .75).attr('rx', 2)
-              .on('mouseover', (e) => showTooltip(e, `${row.name}<br>予測: ${row.fstart?.toLocaleDateString('ja-JP')} 〜 ${row.fend?.toLocaleDateString('ja-JP')}`))
-              .on('mouseout', hideTooltip);
-          }
+      // Actual progress bar (astart → aend or TODAY, gray)
+      if (row.astart) {
+        const effectiveEnd = row.aend || rd;
+        const x1 = Math.max(0, xScale(row.astart));
+        const x2 = Math.min(innerW, xScale(effectiveEnd));
+        if (x2 > x1) {
+          const aBarH = row.level <= 2 ? 6 : 5;
+          const aBarY = barY + (barH - aBarH) / 2;
+          rowG.append('rect').attr('x', x1).attr('y', aBarY).attr('width', x2 - x1).attr('height', aBarH)
+            .attr('fill', '#A0A0A0').attr('opacity', .85).attr('rx', 1)
+            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>実績: ${row.astart?.toLocaleDateString('ja-JP')} 〜 ${row.aend ? row.aend.toLocaleDateString('ja-JP') : 'TODAY'}`))
+            .on('mouseout', hideTooltip);
         }
       }
     }
