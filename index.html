@@ -92,8 +92,8 @@ body.dark .tl-label-sep{stroke:#2a3a5c}
 .gantt-table .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:4px 2px}
 .gantt-table .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px}
 .gantt-bar-cell{min-width:20px;padding:0;position:relative;height:26px}
-.gantt-bar-base{position:absolute;height:8px;top:4px;border-radius:1px;background:#4472C4;opacity:.8}
-.gantt-bar-actual{position:absolute;height:7px;top:14px;border-radius:1px;background:#70AD47;opacity:.9}
+.gantt-bar-base{position:absolute;height:14px;top:6px;border-radius:2px;background:#4472C4;opacity:.6}
+.gantt-bar-actual{position:absolute;height:14px;top:6px;border-radius:2px;background:#00B050;opacity:.85}
 .today-col{background:#FFF3E0 !important}
 .cp-row td:first-child{border-left:3px solid #e53935}
 .gantt-controls{display:flex;gap:8px;padding:10px;border-bottom:1px solid #eee;align-items:center}
@@ -173,6 +173,9 @@ body.dark td{border-color:#2a2a4a;color:#d0d8e8}
 body.dark tr:hover td{background:#1e2a45}
 body.dark .modal{background:#16213e;color:#e0e0e0}
 body.dark .modal h3{color:#90b8e0}
+body.dark #gantt-nw-modal>div{background:#16213e}
+body.dark #gantt-nw-modal>div>div:first-child{background:#1a2535;border-color:#2a3a5c}
+body.dark #gantt-nw-ctnr{background:#12192a}
 body.dark .form-row input,body.dark .form-row select,body.dark .form-row textarea{background:#1a1a2e;border-color:#3a3a5c;color:#e0e0e0}
 body.dark .btn-outline{background:#16213e;border-color:#3a3a5c;color:#ccc}
 body.dark .btn-outline:hover{background:#1e2a45}
@@ -315,6 +318,25 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
     <div class="modal-btns">
       <button class="btn btn-outline" onclick="closeModal('tl-item-modal')">キャンセル</button>
       <button class="btn btn-primary" onclick="addTimelineItem()">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="gantt-nw-modal" style="align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;width:88vw;max-width:1100px;height:78vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.22);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap">
+      <span style="font-size:13px;color:#1a3a5c;font-weight:700" id="gantt-nw-title">サブグラフ</span>
+      <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:6px">
+        深さ:
+        <input type="range" id="gantt-nw-depth" min="1" max="5" value="2" style="width:80px" oninput="drawGanttSubgraph()">
+        <span id="gantt-nw-depth-val">2</span>
+      </label>
+      <button class="btn btn-sm btn-outline" onclick="resetGanttSubgraphZoom()">ズームリセット</button>
+      <span style="font-size:11px;color:#aaa;flex:1">ノードをクリックすると中心を変更</span>
+      <button class="btn btn-sm" onclick="closeModal('gantt-nw-modal')" style="font-size:16px;padding:2px 8px;line-height:1">✕</button>
+    </div>
+    <div id="gantt-nw-ctnr" style="flex:1;overflow:hidden;background:#f8f9fc;cursor:grab">
+      <svg id="gantt-nw-svg" style="width:100%;height:100%"></svg>
     </div>
   </div>
 </div>
@@ -616,7 +638,7 @@ function navigate(screen) {
   });
   const titles = {
     dashboard:'ダッシュボード', timeline:'大日程タイムライン',
-    nw:'NW図（タスク依存関係）', gantt:'ガントチャート（中・小日程）',
+    nw:'NW図（タスク依存関係）', gantt:'ガントチャート（WBS）',
     meeting:'定例ビュー', dept:'機能別進捗報告'
   };
   document.getElementById('topbar-title').textContent = titles[screen] || screen;
@@ -1797,7 +1819,7 @@ function renderGantt() {
         <span style="flex:1"></span>
         <span style="font-size:11px;color:#888">
           <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
-          <span style="display:inline-block;width:12px;height:6px;background:#70AD47;border-radius:1px;opacity:.9;vertical-align:middle;margin-right:3px"></span>実績
+          <span style="display:inline-block;width:12px;height:6px;background:#00B050;border-radius:1px;opacity:.85;vertical-align:middle;margin-right:3px"></span>実績
         </span>
       </div>
       <div id="gantt-wrap"></div>
@@ -1857,8 +1879,8 @@ function drawGantt() {
 
   // Fixed columns
   let fixedCols = [
-    {key:'wbs',label:'WBS',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当',w:80},
-    {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW',w:28}
+    {key:'id',label:'ID',w:40},{key:'wbs',label:'WBS番号',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当部門',w:80},
+    {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW図',w:32}
   ];
 
   // Visible tasks (apply collapse)
@@ -1880,7 +1902,7 @@ function drawGantt() {
   const _ganttColOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
   if (_ganttColOrder && _ganttColOrder.length === fixedCols.length) {
     fixedCols = _ganttColOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
-    if (fixedCols.length !== _ganttColOrder.length) fixedCols = [{key:'wbs',label:'WBS'},{key:'name',label:'タスク名'},{key:'resource',label:'担当'},{key:'pct',label:'達成率'},{key:'status',label:'ステータス'},{key:'nw',label:'NW'}];
+    if (fixedCols.length !== _ganttColOrder.length) fixedCols = [{key:'id',label:'ID'},{key:'wbs',label:'WBS番号'},{key:'name',label:'タスク名'},{key:'resource',label:'担当部門'},{key:'pct',label:'達成率'},{key:'status',label:'ステータス'},{key:'nw',label:'NW図'}];
   }
 
   let html = '<table class="gantt-table"><thead>';
@@ -1907,7 +1929,8 @@ function drawGantt() {
     html += `<tr class="${isCP ? 'cp-row' : ''}${isSummary ? ' gantt-summary-row' : ''}">`;
     fixedCols.forEach(c => {
       let val = '';
-      if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
+      if (c.key === 'id') val = `<span style="font-size:10px;color:#aaa">${task.id}</span>`;
+      else if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
       else if (c.key === 'name') {
         const toggle = isSummary ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>` : '<span style="display:inline-block;width:18px"></span>';
         val = `<div class="${indent}" style="white-space:nowrap;overflow:hidden;max-width:180px;text-overflow:ellipsis">${toggle}${task.name}</div>`;
@@ -1915,8 +1938,8 @@ function drawGantt() {
       else if (c.key === 'resource') val = `<span style="font-size:10px;color:#888">${task.resource||''}</span>`;
       else if (c.key === 'pct') val = `${pctBar(task.pct)}`;
       else if (c.key === 'status') val = statusBadge(task.status);
-      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="jumpToNW(${task.id})">🔗</span>`;
-      const stickyStyle = ['wbs','name','resource','pct','status','nw'].includes(c.key) ?
+      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="showGanttSubgraph(${task.id})" title="サブグラフを表示">🔗</span>`;
+      const stickyStyle = ['id','wbs','name','resource','pct','status','nw'].includes(c.key) ?
         'position:sticky;left:0;z-index:1;' : '';
       html += `<td class="gt-cell" style="${stickyStyle}white-space:nowrap">${val}</td>`;
     });
@@ -1970,6 +1993,219 @@ window.toggleGanttRow = function(id) {
   if (state.collapsedRows.has(id)) state.collapsedRows.delete(id);
   else state.collapsedRows.add(id);
   drawGantt();
+};
+
+// =====================================================================
+// GANTT: SUBGRAPH MODAL (4-4)
+// =====================================================================
+let _ganttSubFocusId = null;
+let _ganttSubZoom = null;
+
+window.showGanttSubgraph = function(id) {
+  _ganttSubFocusId = id;
+  const task = state.tasks.find(t => t.id === id);
+  document.getElementById('gantt-nw-title').textContent = 'サブグラフ: ' + (task ? task.name : String(id));
+  const depthInput = document.getElementById('gantt-nw-depth');
+  depthInput.value = 2;
+  document.getElementById('gantt-nw-depth-val').textContent = '2';
+  openModal('gantt-nw-modal');
+  setTimeout(() => drawGanttSubgraph(), 50);
+};
+
+window.drawGanttSubgraph = function() {
+  const depthEl = document.getElementById('gantt-nw-depth');
+  const depth = parseInt(depthEl.value, 10);
+  document.getElementById('gantt-nw-depth-val').textContent = depth;
+
+  const fid = _ganttSubFocusId;
+  const tasks = state.tasks.filter(t => !t.isSummary && t.active !== 'いいえ');
+
+  // Build all edges
+  const allEdges = [];
+  tasks.forEach(t => {
+    if (!t.pred) return;
+    t.pred.split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean).forEach(p => {
+      allEdges.push({source: p, target: t.id});
+    });
+  });
+
+  // BFS to collect subgraph nodes within depth
+  const sel = new Set([fid]);
+  for (let i = 0; i < depth; i++) {
+    const add = new Set();
+    allEdges.forEach(e => {
+      if (sel.has(e.source)) add.add(e.target);
+      if (sel.has(e.target)) add.add(e.source);
+    });
+    add.forEach(id => sel.add(id));
+  }
+
+  const subTasks = tasks.filter(t => sel.has(t.id));
+  const subIds = new Set(subTasks.map(t => t.id));
+  const subEdges = allEdges.filter(e => subIds.has(e.source) && subIds.has(e.target));
+
+  // Layout: compute column depths via topological sort
+  const nodes = subTasks.map(t => ({...t}));
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+
+  const succ = {}, ind = {};
+  nodes.forEach(n => { succ[n.id] = []; ind[n.id] = 0; });
+  subEdges.forEach(e => {
+    if (nodeMap[e.source] && nodeMap[e.target]) {
+      succ[e.source].push(e.target);
+      ind[e.target]++;
+    }
+  });
+
+  const colDepth = {};
+  const queue = nodes.filter(n => ind[n.id] === 0).map(n => n.id);
+  queue.forEach(id => { colDepth[id] = 0; });
+  const visited = new Set(queue);
+  let qi = 0;
+  while (qi < queue.length) {
+    const id = queue[qi++];
+    succ[id].forEach(sid => {
+      colDepth[sid] = Math.max(colDepth[sid] || 0, (colDepth[id] || 0) + 1);
+      ind[sid]--;
+      if (ind[sid] === 0 && !visited.has(sid)) { queue.push(sid); visited.add(sid); }
+    });
+  }
+
+  // Group nodes by column
+  const byCol = {};
+  nodes.forEach(n => {
+    const d = colDepth[n.id] || 0;
+    if (!byCol[d]) byCol[d] = [];
+    byCol[d].push(n);
+  });
+
+  const NW = 190, NH = 90, CG = 60, RG = 12;
+  const colHeights = {};
+  Object.entries(byCol).forEach(([d, col]) => {
+    colHeights[d] = col.length * (NH + RG) - RG;
+  });
+  const maxH = Math.max(...Object.values(colHeights), 1);
+
+  nodes.forEach(n => {
+    const d = colDepth[n.id] || 0;
+    const col = byCol[d];
+    const idx = col.indexOf(n);
+    n.gx = d * (NW + CG);
+    n.gy = idx * (NH + RG) + (maxH - colHeights[d]) / 2;
+  });
+
+  const ctnr = document.getElementById('gantt-nw-ctnr');
+  const cW = ctnr.clientWidth || 800;
+  const cH = ctnr.clientHeight || 500;
+  const svg = d3.select('#gantt-nw-svg').attr('width', cW).attr('height', cH);
+  svg.selectAll('*').remove();
+
+  const defs = svg.append('defs');
+  ['normal','cp'].forEach(type => {
+    defs.append('marker').attr('id','gantt-arr-'+type)
+      .attr('viewBox','0 -5 10 10').attr('refX',10).attr('refY',0)
+      .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+      .append('path').attr('d','M0,-5L10,0L0,5')
+      .attr('fill', type==='cp'?'#e53935':'#4472C4');
+  });
+
+  const g = svg.append('g');
+
+  // Zoom
+  const zoom = d3.zoom().scaleExtent([0.2, 3]).on('zoom', ev => g.attr('transform', ev.transform));
+  svg.call(zoom);
+  _ganttSubZoom = {svg, zoom};
+
+  // Initial center
+  const totalW = (Math.max(...nodes.map(n => colDepth[n.id] || 0)) + 1) * (NW + CG);
+  const totalH = maxH + NH;
+  const initScale = Math.min(1, cW / (totalW + 40), cH / (totalH + 40));
+  const initX = (cW - totalW * initScale) / 2;
+  const initY = (cH - totalH * initScale) / 2;
+  svg.call(zoom.transform, d3.zoomIdentity.translate(initX, initY).scale(initScale));
+
+  // Draw edges
+  subEdges.forEach(e => {
+    const s = nodeMap[e.source], t = nodeMap[e.target];
+    if (!s || !t) return;
+    const cp = s.critical === 'はい' && t.critical === 'はい';
+    const sx = s.gx + NW + 20, sy = s.gy + NH / 2 + 20;
+    const tx = t.gx + 20, ty = t.gy + NH / 2 + 20;
+    const cx = (sx + tx) / 2;
+    g.append('path')
+      .attr('d', `M${sx},${sy} C${cx},${sy} ${cx},${ty} ${tx},${ty}`)
+      .attr('fill', 'none').attr('stroke', cp ? '#e53935' : '#4472C4')
+      .attr('stroke-width', cp ? 2.5 : 1.5)
+      .attr('marker-end', `url(#gantt-arr-${cp?'cp':'normal'})`)
+      .attr('opacity', 0.8);
+  });
+
+  // Draw nodes
+  nodes.forEach(n => {
+    const isClosed = n.status === 'Close';
+    const bg = isClosed ? '#D9D9D9' : ({
+      'On-going':'#E2EFDA','Delay':'#FFE0E0','nActive':'#F2F2F2','Disable':'#F2F2F2'
+    }[n.status] || '#fff');
+    const bd = isClosed ? '#AAAAAA' : ({
+      'On-going':'#00B050','Delay':'#FF0000','nActive':'#808080','Disable':'#BFBFBF'
+    }[n.status] || '#ccc');
+    const isCP = !isClosed && n.critical === 'はい';
+    const isFocus = n.id === fid;
+    const textColor = isClosed ? '#888888' : '#222';
+
+    const ng = g.append('g')
+      .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
+      .style('cursor', 'pointer')
+      .on('click', function() {
+        _ganttSubFocusId = n.id;
+        const task = state.tasks.find(t => t.id === n.id);
+        document.getElementById('gantt-nw-title').textContent = 'サブグラフ: ' + (task ? task.name : String(n.id));
+        drawGanttSubgraph();
+      });
+
+    ng.append('rect').attr('width', NW).attr('height', NH).attr('rx', 5)
+      .attr('fill', bg).attr('stroke', isFocus ? '#1a3a5c' : bd)
+      .attr('stroke-width', isFocus ? 3 : (isCP ? 2 : 1));
+
+    if (isCP && !isClosed) {
+      ng.append('rect').attr('width', NW).attr('height', NH).attr('rx', 5)
+        .attr('fill', 'none').attr('stroke', '#e53935').attr('stroke-width', 2).attr('opacity', 0.6);
+    }
+
+    const statusLabels = {'On-going':'進行中','Delay':'遅延','Close':'完了','nActive':'未着手','Disable':'除外'};
+    const lines = [
+      {text: `[${n.wbs}]`, y: 14, size: 9, color: '#888'},
+      {text: n.name, y: 28, size: 10, color: textColor, bold: true, maxW: NW - 10},
+      {text: `担当: ${n.resource || '-'}`, y: 44, size: 9, color: isClosed ? '#aaa' : '#555'},
+      {text: `達成率: ${n.pct != null ? n.pct + '%' : '-'}`, y: 57, size: 9, color: isClosed ? '#aaa' : '#555'},
+      {text: statusLabels[n.status] || n.status, y: 72, size: 9, color: bd, bold: true},
+    ];
+
+    lines.forEach(l => {
+      const txt = ng.append('text')
+        .attr('x', 8).attr('y', l.y)
+        .attr('font-size', l.size).attr('fill', l.color)
+        .attr('font-weight', l.bold ? '700' : '400')
+        .text(l.text);
+      if (l.maxW) {
+        const len = l.text.length;
+        if (len > 18) txt.text(l.text.substring(0, 16) + '…');
+      }
+    });
+
+    if (isCP && !isClosed) {
+      ng.append('rect').attr('x', NW - 22).attr('y', 2).attr('width', 20).attr('height', 13).attr('rx', 2).attr('fill', '#e53935');
+      ng.append('text').attr('x', NW - 12).attr('y', 12).attr('text-anchor', 'middle').attr('font-size', 8).attr('fill', '#fff').attr('font-weight', '700').text('CP');
+    }
+  });
+};
+
+window.resetGanttSubgraphZoom = function() {
+  if (!_ganttSubZoom) return;
+  const { svg, zoom } = _ganttSubZoom;
+  const ctnr = document.getElementById('gantt-nw-ctnr');
+  svg.call(zoom.transform, d3.zoomIdentity.translate(ctnr.clientWidth / 4, 20).scale(0.8));
 };
 
 // =====================================================================
