@@ -264,7 +264,7 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
     <a data-screen="dashboard" class="active">🏠 ダッシュボード</a>
     <a data-screen="timeline">📅 大日程タイムライン</a>
     <a data-screen="nw">🔗 NW図</a>
-    <a data-screen="gantt">📋 ガントチャート</a>
+    <a data-screen="gantt">📋 ガントチャート（WBS）</a>
     <a data-screen="meeting">📝 定例ビュー</a>
     <a data-screen="dept">👥 機能別進捗報告</a>
   </nav>
@@ -1693,7 +1693,7 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
   return '<!DOCTYPE html>\n' +
 '<html lang="ja"><head><meta charset="UTF-8">' +
 '<title>サブグラフ: ' + focusTitle + '</title>' +
-'<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\\/script>' +
+'<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></' + 'script>' +
 '<style>' +
 '*{box-sizing:border-box;margin:0;padding:0}' +
 'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}' +
