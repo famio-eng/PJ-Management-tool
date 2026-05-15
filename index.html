@@ -72,8 +72,14 @@ tr:hover td{background:#fafbff}
 .nw-detail-val{flex:1;font-weight:500}
 .nw-controls{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
 /* Timeline */
-#tl-wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:16px;overflow-x:auto}
-.tl-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+.tl-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+#tl-outer{display:flex;overflow:hidden}
+#tl-labels{flex:0 0 188px;overflow:hidden;position:relative;z-index:5}
+#tl-chart{flex:1;overflow-x:auto;min-width:0}
+.tl-label-bg{fill:#fff}
+body.dark .tl-label-bg{fill:#16213e}
+.tl-label-sep{stroke:#ddd;stroke-width:1}
+body.dark .tl-label-sep{stroke:#2a3a5c}
 /* Gantt */
 #gantt-wrap{overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .gantt-table{border-collapse:collapse;font-size:11px;min-width:100%}
@@ -215,7 +221,8 @@ body.dark .gantt-table td { background: #16213e; }
 /* Section headings in dark mode */
 body.dark .section h2 { color: #90b8e0; border-left-color: #4472C4; }
 /* Timeline SVG container - transparent so section dark bg shows through */
-body.dark #tl-wrap { background: transparent; }
+body.dark #tl-labels { background: #16213e; }
+body.dark #tl-chart  { background: transparent; }
 /* Timeline SVG CSS classes for dark mode */
 .tl-gridline { stroke: #e0e0e0; stroke-width: 1; }
 body.dark .tl-gridline { stroke: #3a3a5c; }
@@ -227,6 +234,13 @@ body.dark .tl-row-even { fill: #1e2a45; opacity: .5; }
 body.dark .tl-row-odd { fill: #16213e; opacity: .5; }
 .tl-task-text { fill: #333; }
 body.dark .tl-task-text { fill: #d0d8e8; }
+/* Task list panel row backgrounds (dark mode) */
+#tl-task-list tr.tl-list-l1 { background: #f0f4fa; }
+#tl-task-list tr.tl-list-l2 { background: #f8faff; }
+body.dark #tl-task-list tr.tl-list-l1 { background: #1a2a45; }
+body.dark #tl-task-list tr.tl-list-l2 { background: #16223a; }
+body.dark #tl-task-list thead tr { background: #1e2d50 !important; }
+body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-color: #243050; }
 </style>
 </head>
 <body>
@@ -896,6 +910,7 @@ function buildTLRows() {
       resource: t.resource || '',
       source: 'auto',
       color: null,
+      critical: t.critical === 'はい',
       isSummary: hasSelectedChildren,
       isExpanded: state.tlExpandedIds.has(t.id),
     });
@@ -941,16 +956,17 @@ function buildTLTaskListHTML() {
     const checked = state.tlSelectedIds.has(t.id);
     const indent = (t.level - 1) * 14;
     const bold = t.level <= 2;
-    const bg = t.level === 1 ? '#f0f4fa' : t.level === 2 ? '#f8faff' : '';
+    const rowCls = t.level === 1 ? 'tl-list-l1' : t.level === 2 ? 'tl-list-l2' : '';
+    const isCritical = t.critical === 'はい';
     const name = t.name.length > 32 ? t.name.slice(0, 31) + '…' : t.name;
-    html += `<tr style="border-bottom:1px solid #f0f0f0;${bg ? 'background:' + bg : ''}">
+    html += `<tr class="${rowCls}" style="border-bottom:1px solid #f0f0f0">
       <td style="text-align:center;padding:3px 6px">
         <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
       </td>
-      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}">${name}</td>
-      <td style="padding:3px 6px;color:#666">${t.bstart || ''}</td>
-      <td style="padding:3px 6px;color:#666">${t.bend || ''}</td>
-      <td style="padding:3px 6px;color:#666;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
+      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${isCritical ? '🔴 ' : ''}${name}</td>
+      <td style="padding:3px 6px">${t.bstart || ''}</td>
+      <td style="padding:3px 6px">${t.bend || ''}</td>
+      <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
       <td style="padding:3px 6px">${t.status || ''}</td>
     </tr>`;
   });
@@ -969,7 +985,7 @@ window.toggleTLTask = function(id, checked) {
     const active = state.tasks.filter(t => t.active !== 'いいえ');
     allCb.checked = active.length > 0 && active.every(t => state.tlSelectedIds.has(t.id));
   }
-  drawTimeline(state.tlMonths || 12);
+  drawTimeline();
 };
 
 window.toggleAllTLTasks = function(checked) {
@@ -980,7 +996,7 @@ window.toggleAllTLTasks = function(checked) {
   });
   saveStorage();
   document.querySelectorAll('#tl-task-list input[data-tid]').forEach(cb => { cb.checked = checked; });
-  drawTimeline(state.tlMonths || 12);
+  drawTimeline();
 };
 
 window.toggleTLPanel = function() {
@@ -995,12 +1011,12 @@ window.toggleTLPanel = function() {
 window.toggleTLExpand = function(id) {
   if (state.tlExpandedIds.has(id)) state.tlExpandedIds.delete(id);
   else state.tlExpandedIds.add(id);
-  drawTimeline(state.tlMonths || 12);
+  drawTimeline();
 };
 
 function renderTimeline() {
-  let showMonths = state.tlMonths || 12;
   initTLSelection();
+  const zoom = state.tlZoom || 65;
 
   const deptLegend = Object.entries(DEPT_COLORS).map(([dept, color]) =>
     `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;white-space:nowrap">
@@ -1010,8 +1026,9 @@ function renderTimeline() {
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-bottom:10px">
       <div class="tl-controls">
-        <span style="font-size:12px;color:#666">表示期間:</span>
-        ${[6,12,18].map(m => `<button class="btn btn-sm ${showMonths===m?'btn-primary':'btn-outline'}" onclick="setTLMonths(${m})">${m}ヶ月</button>`).join('')}
+        <span style="font-size:12px;color:#666">ズーム:</span>
+        ${[[45,'狭'],[65,'標準'],[90,'広']].map(([z,l]) => `<button class="btn btn-sm ${zoom===z?'btn-primary':'btn-outline'}" onclick="setTLZoom(${z})">${l}</button>`).join('')}
+        <button class="btn btn-sm btn-outline" onclick="scrollTLToday()" style="margin-left:8px">TODAY へ</button>
       </div>
       <div style="font-size:11px;color:#888;line-height:2">
         <span style="font-weight:600;margin-right:4px">基準計画バー（部門別）:</span>${deptLegend}
@@ -1022,12 +1039,17 @@ function renderTimeline() {
           <span style="width:13px;height:6px;background:#A0A0A0;border-radius:2px;display:inline-block;opacity:.75"></span>実進捗バー</span>
         <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
           <span style="width:11px;height:11px;background:#e53935;transform:rotate(45deg);display:inline-block"></span>&nbsp;マイルストーン</span>
-        <span style="display:inline-flex;align-items:center;gap:3px">
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
           <span style="width:2px;height:14px;background:orange;display:inline-block"></span>TODAY</span>
+        <span style="display:inline-flex;align-items:center;gap:3px">
+          <span style="width:14px;height:10px;border:2px solid #e53935;display:inline-block;border-radius:2px"></span>クリティカルパス</span>
       </div>
     </div>
     <div class="section" style="padding:12px;margin-bottom:10px">
-      <div id="tl-wrap" style="overflow-x:auto"></div>
+      <div id="tl-outer">
+        <div id="tl-labels"></div>
+        <div id="tl-chart"></div>
+      </div>
     </div>
     <div class="section" style="padding:0;overflow:hidden">
       <div id="tl-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;border-bottom:1px solid #eee" onclick="toggleTLPanel()">
@@ -1039,45 +1061,114 @@ function renderTimeline() {
       </div>
     </div>`;
 
-  drawTimeline(showMonths);
+  drawTimeline();
+  scrollTLToday();
 }
 
-window.setTLMonths = function(m) {
-  state.tlMonths = m;
+window.setTLZoom = function(z) {
+  state.tlZoom = z;
   renderTimeline();
 };
 
-function drawTimeline(showMonths) {
-  const wrap = document.getElementById('tl-wrap');
-  if (!wrap) return;
+window.scrollTLToday = function() {
+  const chartEl = document.getElementById('tl-chart');
+  const meta = state._tlChartMeta;
+  if (!chartEl || !meta) return;
+  const { startDate, endDate, chartW } = meta;
+  const rd = toDate(state.reportDate);
+  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, chartW]);
+  const todayX = xScale(rd);
+  chartEl.scrollLeft = Math.max(0, todayX - chartEl.clientWidth / 3);
+};
+
+function drawTimeline() {
+  const labelsEl = document.getElementById('tl-labels');
+  const chartEl  = document.getElementById('tl-chart');
+  if (!labelsEl || !chartEl) return;
 
   const rd = toDate(state.reportDate);
-  const startDate = new Date(rd.getFullYear(), rd.getMonth() - 2, 1);
-  const endDate   = new Date(startDate.getFullYear(), startDate.getMonth() + showMonths, 1);
 
-  const allRows = buildTLRows().filter(r => {
-    const s = r.bstart, e = r.bend || r.bstart;
-    return s && (e >= startDate || s <= endDate);
+  // ── Compute date range from all active tasks ──────────────────────────
+  let minD = null, maxD = null;
+  state.tasks.filter(t => t.active !== 'いいえ').forEach(t => {
+    const s = toDate(t.bstart), e = toDate(t.bend);
+    if (s && (!minD || s < minD)) minD = s;
+    if (e && (!maxD || e > maxD)) maxD = e;
+  });
+  state.timelineItems.forEach(m => {
+    const s = toDate(m.date || m.start), e = toDate(m.end || m.date || m.start);
+    if (s && (!minD || s < minD)) minD = s;
+    if (e && (!maxD || e > maxD)) maxD = e;
+  });
+  if (!minD) minD = new Date(rd.getFullYear(), rd.getMonth() - 3, 1);
+  if (!maxD) maxD = new Date(rd.getFullYear(), rd.getMonth() + 9, 1);
+
+  const startDate = new Date(minD.getFullYear(), minD.getMonth() - 1, 1);
+  const endDate   = new Date(maxD.getFullYear(), maxD.getMonth() + 2, 1);
+
+  const PX_PER_MONTH = state.tlZoom || 65;
+  const totalMonths  = (endDate.getFullYear() - startDate.getFullYear()) * 12
+                     + (endDate.getMonth() - startDate.getMonth());
+  const chartW = Math.max(totalMonths * PX_PER_MONTH, 400);
+  state._tlChartMeta = { startDate, endDate, chartW };
+
+  // ── Rows ──────────────────────────────────────────────────────────────
+  const allRows = buildTLRows(); // selection-filtered, no date filter here
+
+  const labelW = 188;
+  const marginT = 44, marginB = 20;
+  const rowH = 34;
+  const H = marginT + allRows.length * rowH + marginB;
+
+  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, chartW]);
+
+  // ── Label SVG (fixed left column) ────────────────────────────────────
+  const labelSvg = d3.select(labelsEl).selectAll('svg').data([1]).join('svg')
+    .attr('width', labelW).attr('height', H);
+  labelSvg.selectAll('*').remove();
+
+  // header background
+  labelSvg.append('rect').attr('x', 0).attr('y', 0).attr('width', labelW).attr('height', marginT)
+    .attr('class', 'tl-label-bg');
+  // separator line
+  labelSvg.append('line').attr('x1', labelW - 1).attr('x2', labelW - 1)
+    .attr('y1', 0).attr('y2', H).attr('class', 'tl-label-sep');
+
+  allRows.forEach((row, i) => {
+    const y = marginT + i * rowH;
+    labelSvg.append('rect').attr('x', 0).attr('y', y).attr('width', labelW).attr('height', rowH)
+      .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
+
+    const indent = row.level === 1 ? 4 : row.level === 2 ? 14 : 22;
+    const label  = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
+    const icon   = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
+    const prefix = row.source === 'manual' ? '✏ ' : icon;
+
+    const lbl = labelSvg.append('text')
+      .attr('x', indent).attr('y', y + rowH / 2 + 4)
+      .attr('font-size', row.level === 1 ? '12px' : '11px')
+      .attr('font-weight', row.level <= 2 ? '600' : '400')
+      .attr('class', 'tl-task-text')
+      .text(prefix + label);
+    if (row.isSummary && row.id != null)
+      lbl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
   });
 
-  const W = Math.max(wrap.clientWidth - 8, 600);
-  const marginL = 188, marginR = 10, marginT = 48, marginB = 20;
-  const innerW = W - marginL - marginR;
-  const rowH = 34;
-  const H = marginT + allRows.length * rowH + marginB + 24;
+  // ── Chart SVG (scrollable) ────────────────────────────────────────────
+  const chartSvg = d3.select(chartEl).selectAll('svg').data([1]).join('svg')
+    .attr('width', chartW + 6).attr('height', H);
+  chartSvg.selectAll('*').remove();
 
-  const svg = d3.select('#tl-wrap').selectAll('svg').data([1]).join('svg')
-    .attr('width', W).attr('height', H);
-  svg.selectAll('*').remove();
+  const g = chartSvg.append('g').attr('transform', `translate(0,${marginT})`);
 
-  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, innerW]);
-  const g = svg.append('g').attr('transform', `translate(${marginL},${marginT})`);
+  // header bg for chart area
+  chartSvg.append('rect').attr('x', 0).attr('y', 0).attr('width', chartW + 6).attr('height', marginT)
+    .attr('class', 'tl-label-bg');
 
-  // Month gridlines + header
-  const months = d3.timeMonths(startDate, endDate);
-  months.forEach(m => {
+  // Month gridlines + labels
+  d3.timeMonths(startDate, endDate).forEach(m => {
     const x = xScale(m);
-    g.append('line').attr('x1', x).attr('x2', x).attr('y1', -28).attr('y2', allRows.length * rowH)
+    g.append('line').attr('x1', x).attr('x2', x).attr('y1', -marginT).attr('y2', allRows.length * rowH)
       .attr('class', 'tl-gridline');
     g.append('text').attr('x', x + 4).attr('y', -14)
       .attr('font-size', '10px').attr('class', 'tl-month-text')
@@ -1086,10 +1177,10 @@ function drawTimeline(showMonths) {
 
   // TODAY line
   const tx = xScale(rd);
-  if (tx >= 0 && tx <= innerW) {
-    g.append('line').attr('x1', tx).attr('x2', tx).attr('y1', -28).attr('y2', allRows.length * rowH)
+  if (tx >= 0 && tx <= chartW) {
+    g.append('line').attr('x1', tx).attr('x2', tx).attr('y1', -marginT).attr('y2', allRows.length * rowH)
       .attr('stroke', 'orange').attr('stroke-width', 2).attr('stroke-dasharray', '4,3');
-    g.append('text').attr('x', tx + 2).attr('y', -32)
+    g.append('text').attr('x', tx + 2).attr('y', -marginT + 12)
       .attr('font-size', '10px').attr('fill', 'orange').text('TODAY');
   }
 
@@ -1098,38 +1189,17 @@ function drawTimeline(showMonths) {
     const y = i * rowH;
     const rowG = g.append('g').attr('transform', `translate(0,${y})`);
 
-    // Row background (alternating)
-    rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', innerW).attr('height', rowH)
+    rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', chartW).attr('height', rowH)
       .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
-
-    // Task name label area
-    const indent = row.level === 1 ? 0 : row.level === 2 ? 10 : 18;
-    const maxChars = row.isSummary ? 20 : 22;
-    const label = row.name.length > maxChars ? row.name.slice(0, maxChars - 1) + '…' : row.name;
-    const expandIcon = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
-    const prefix = row.source === 'manual' ? '✏ ' : expandIcon;
-
-    const textEl = g.append('text')
-      .attr('x', -marginL + indent)
-      .attr('y', y + rowH / 2 + 4)
-      .attr('font-size', row.level === 1 ? '12px' : '11px')
-      .attr('font-weight', row.level <= 2 ? '600' : '400')
-      .attr('class', 'tl-task-text')
-      .text(prefix + label);
-
-    // Clickable label for summary tasks (expand/collapse)
-    if (row.isSummary && row.id != null) {
-      textEl.style('cursor', 'pointer')
-        .on('click', () => toggleTLExpand(row.id));
-    }
 
     if (row.isMilestone) {
       const mx = xScale(row.bstart);
-      if (mx >= 0 && mx <= innerW) {
+      if (mx >= 0 && mx <= chartW) {
         const color = row.color || '#e53935';
         const d = 8;
-        const diamond = `M${mx},${rowH/2-d} L${mx+d},${rowH/2} L${mx},${rowH/2+d} L${mx-d},${rowH/2} Z`;
-        rowG.append('path').attr('d', diamond).attr('fill', color).attr('stroke', color);
+        rowG.append('path')
+          .attr('d', `M${mx},${rowH/2-d} L${mx+d},${rowH/2} L${mx},${rowH/2+d} L${mx-d},${rowH/2} Z`)
+          .attr('fill', color).attr('stroke', color);
         rowG.append('text').attr('x', mx + d + 4).attr('y', rowH / 2 + 4)
           .attr('font-size', '10px').attr('fill', color).attr('font-weight', '600')
           .text(row.name);
@@ -1137,49 +1207,55 @@ function drawTimeline(showMonths) {
     } else {
       const barH = row.level <= 2 ? 14 : 10;
       const barY = (rowH - barH) / 2;
-      // Base plan bar (dept color)
+      // Base plan bar
       if (row.bstart && row.bend) {
         const x1 = Math.max(0, xScale(row.bstart));
-        const x2 = Math.min(innerW, xScale(row.bend));
+        const x2 = Math.min(chartW, xScale(row.bend));
         if (x2 > x1) {
           const color = row.color || getDeptColor(row.resource);
           const barEl = rowG.append('rect')
             .attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
             .attr('fill', color).attr('opacity', row.level <= 2 ? .85 : .7).attr('rx', 2)
-            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}`))
+            .on('mouseover', (e) => showTooltip(e,
+              `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}${row.critical ? '<br>🔴 クリティカルパス' : ''}`))
             .on('mouseout', hideTooltip);
-          // Summary bars also clickable for expand/collapse
-          if (row.isSummary && row.id != null) {
-            barEl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
+          // Critical path: red border
+          if (row.critical) {
+            rowG.append('rect')
+              .attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
+              .attr('fill', 'none').attr('stroke', '#e53935').attr('stroke-width', 2).attr('rx', 2);
           }
+          if (row.isSummary && row.id != null)
+            barEl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
         }
       }
-      // Actual progress bar (astart → aend or TODAY, gray)
+      // Actual progress bar
       if (row.astart) {
         const effectiveEnd = row.aend || rd;
         const x1 = Math.max(0, xScale(row.astart));
-        const x2 = Math.min(innerW, xScale(effectiveEnd));
+        const x2 = Math.min(chartW, xScale(effectiveEnd));
         if (x2 > x1) {
           const aBarH = row.level <= 2 ? 6 : 5;
-          const aBarY = barY + (barH - aBarH) / 2;
-          rowG.append('rect').attr('x', x1).attr('y', aBarY).attr('width', x2 - x1).attr('height', aBarH)
+          rowG.append('rect')
+            .attr('x', x1).attr('y', barY + (barH - aBarH) / 2)
+            .attr('width', x2 - x1).attr('height', aBarH)
             .attr('fill', '#A0A0A0').attr('opacity', .85).attr('rx', 1)
-            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>実績: ${row.astart?.toLocaleDateString('ja-JP')} 〜 ${row.aend ? row.aend.toLocaleDateString('ja-JP') : 'TODAY'}`))
+            .on('mouseover', (e) => showTooltip(e,
+              `${row.name}<br>実績: ${row.astart?.toLocaleDateString('ja-JP')} 〜 ${row.aend ? row.aend.toLocaleDateString('ja-JP') : 'TODAY'}`))
             .on('mouseout', hideTooltip);
         }
       }
     }
   });
 
-  // Manual items delete buttons (right side)
-  const manualRows = allRows.filter(r => r.source === 'manual');
-  manualRows.forEach((row, i) => {
-    const rowIdx = allRows.indexOf(row);
-    const y = rowIdx * rowH + rowH / 2 - 8;
+  // Manual items delete buttons
+  allRows.filter(r => r.source === 'manual').forEach(row => {
+    const ri = allRows.indexOf(row);
     const origIdx = state.timelineItems.findIndex(m => m.id === row.id);
     if (origIdx < 0) return;
-    svg.append('text').attr('x', W - marginR - 16).attr('y', marginT + y + 10)
+    g.append('text').attr('x', chartW - 4).attr('y', ri * rowH + rowH / 2 + 4)
       .attr('font-size', '12px').attr('fill', '#e53935').attr('cursor', 'pointer')
+      .attr('text-anchor', 'end')
       .text('✕').on('click', () => { state.timelineItems.splice(origIdx, 1); saveStorage(); renderTimeline(); });
   });
 }
