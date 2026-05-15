@@ -204,6 +204,22 @@ body.dark .filter-btn.active{color:#90b8e0}
 /* Drag over for col reorder */
 th.drag-over{background:#d0e4f7!important;outline:2px dashed #4472C4;outline-offset:-2px}
 body.dark th.drag-over{background:#243555!important;outline-color:#90b8e0}
+/* Gantt dark mode - class-based overrides */
+.gantt-summary-row td { background: #f5f7fa; }
+body.dark .gantt-summary-row td { background: #1a2535 !important; }
+body.dark .gantt-table .today-bg { background: #2c2010 !important; }
+body.dark .gantt-table td.gt-cell { color: #d0d8e8; }
+/* Timeline SVG CSS classes for dark mode */
+.tl-gridline { stroke: #e0e0e0; stroke-width: 1; }
+body.dark .tl-gridline { stroke: #3a3a5c; }
+.tl-month-text { fill: #666; }
+body.dark .tl-month-text { fill: #7a8a9a; }
+.tl-row-even { fill: #fafbff; opacity: .5; }
+body.dark .tl-row-even { fill: #1e2a45; opacity: .5; }
+.tl-row-odd { fill: #fff; opacity: .5; }
+body.dark .tl-row-odd { fill: #16213e; opacity: .5; }
+.tl-task-text { fill: #333; }
+body.dark .tl-task-text { fill: #d0d8e8; }
 </style>
 </head>
 <body>
@@ -862,9 +878,9 @@ function drawTimeline(showMonths) {
   months.forEach(m => {
     const x = xScale(m);
     g.append('line').attr('x1', x).attr('x2', x).attr('y1', -28).attr('y2', allRows.length * rowH)
-      .attr('stroke', '#e0e0e0').attr('stroke-width', 1);
+      .attr('class', 'tl-gridline');
     g.append('text').attr('x', x + 4).attr('y', -14)
-      .attr('font-size', '10px').attr('fill', '#666')
+      .attr('font-size', '10px').attr('class', 'tl-month-text')
       .text(d3.timeFormat('%Y/%m')(m));
   });
 
@@ -884,7 +900,7 @@ function drawTimeline(showMonths) {
 
     // Row background (alternating)
     rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', innerW).attr('height', rowH)
-      .attr('fill', i % 2 === 0 ? '#fafbff' : '#fff').attr('opacity', .5);
+      .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
 
     // Task name
     const indent = row.level === 1 ? 0 : row.level === 2 ? 10 : 18;
@@ -892,7 +908,7 @@ function drawTimeline(showMonths) {
     g.append('text').attr('x', -marginL + indent).attr('y', y + rowH / 2 + 4)
       .attr('font-size', row.level === 1 ? '12px' : row.level === 2 ? '11px' : '11px')
       .attr('font-weight', row.level <= 2 ? '600' : '400')
-      .attr('fill', '#333')
+      .attr('class', 'tl-task-text')
       .text((row.source === 'manual' ? '✏ ' : '') + label);
 
     if (row.isMilestone) {
@@ -1330,7 +1346,7 @@ function drawGantt() {
   if (curMonth) monthGroups.push({label: curMonth, count: weekDates.length - curStart});
 
   // Fixed columns
-  const fixedCols = [
+  let fixedCols = [
     {key:'wbs',label:'WBS',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当',w:80},
     {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW',w:28}
   ];
@@ -1350,10 +1366,17 @@ function drawGantt() {
     }
   });
 
+  // Apply saved column order
+  const _ganttColOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
+  if (_ganttColOrder && _ganttColOrder.length === fixedCols.length) {
+    fixedCols = _ganttColOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
+    if (fixedCols.length !== _ganttColOrder.length) fixedCols = [{key:'wbs',label:'WBS'},{key:'name',label:'タスク名'},{key:'resource',label:'担当'},{key:'pct',label:'達成率'},{key:'status',label:'ステータス'},{key:'nw',label:'NW'}];
+  }
+
   let html = '<table class="gantt-table"><thead>';
   // Month row
   html += '<tr>';
-  fixedCols.forEach(c => html += `<th class="gt-cell" style="width:${c.w}px;min-width:${c.w}px" rowspan="2"></th>`);
+  fixedCols.forEach(c => html += `<th class="gt-cell" data-col-key="${c.key}" style="white-space:nowrap" rowspan="2">${c.label}</th>`);
   monthGroups.forEach(mg => html += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
   html += '</tr>';
   // Week row
@@ -1369,9 +1392,9 @@ function drawGantt() {
     const isSummary = task.isSummary;
     const isCollapsed = state.collapsedRows.has(task.id);
     const indent = task.level === 1 ? 'il1' : task.level === 2 ? 'il2' : task.level === 3 ? 'il3' : 'il4';
-    const rowBg = isSummary ? 'background:#f5f7fa' : '';
+    const rowBg = '';
 
-    html += `<tr class="${isCP ? 'cp-row' : ''}" style="${rowBg}">`;
+    html += `<tr class="${isCP ? 'cp-row' : ''}${isSummary ? ' gantt-summary-row' : ''}">`;
     fixedCols.forEach(c => {
       let val = '';
       if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
@@ -1385,7 +1408,7 @@ function drawGantt() {
       else if (c.key === 'nw') val = `<span class="nw-icon" onclick="jumpToNW(${task.id})">🔗</span>`;
       const stickyStyle = ['wbs','name','resource','pct','status','nw'].includes(c.key) ?
         'position:sticky;left:0;z-index:1;' : '';
-      html += `<td class="gt-cell" style="${rowBg};${stickyStyle}min-width:${c.w}px">${val}</td>`;
+      html += `<td class="gt-cell" style="${stickyStyle}white-space:nowrap">${val}</td>`;
     });
 
     const bstart = toDate(task.bstart), bend = toDate(task.bend);
@@ -1395,7 +1418,8 @@ function drawGantt() {
     weekDates.forEach(w => {
       const wEnd = new Date(w.getTime() + 6 * 86400000);
       const isToday = w <= today && wEnd >= today;
-      const bg = isToday ? 'background:#FFF3E0;' : '';
+      const bg = '';
+      const todayClass = isToday ? ' today-bg' : '';
 
       // Check overlaps
       const baseOverlap = bstart && bend && bstart <= wEnd && bend >= w;
@@ -1422,46 +1446,14 @@ function drawGantt() {
         cellContent += `<div class="gantt-bar-actual" style="left:${leftPct}%;width:${widPct}%"></div>`;
       }
       cellContent += '</div>';
-      html += `<td class="gantt-bar-cell" style="${bg}">${cellContent}</td>`;
+      html += `<td class="gantt-bar-cell${todayClass}">${cellContent}</td>`;
     });
     html += '</tr>';
   });
 
   html += '</tbody></table>';
   wrap.innerHTML = html;
-  // Resize only for fixed columns (first 6 th cells in the rowspan row)
-  const ganttTbl = wrap.querySelector('table');
-  if (ganttTbl) {
-    const fixedHeaderRow = ganttTbl.querySelector('thead tr:first-child');
-    if (fixedHeaderRow) {
-      [...fixedHeaderRow.cells].forEach((th, i) => {
-        if (th.rowSpan < 2) return;
-        th.style.position = 'relative';
-        const key = 'pj_column_widths_gantt';
-        const saved = JSON.parse(localStorage.getItem(key) || '{}');
-        if (saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
-        const handle = document.createElement('div');
-        handle.className = 'col-resizer';
-        th.appendChild(handle);
-        handle.addEventListener('mousedown', (e) => {
-          e.preventDefault(); e.stopPropagation();
-          handle.classList.add('resizing');
-          const startX = e.clientX, startW = th.offsetWidth;
-          const onMove = (e) => { const w = Math.max(30, startW + e.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
-          const onUp = () => {
-            handle.classList.remove('resizing');
-            const ths = [...fixedHeaderRow.cells].filter(t => t.rowSpan >= 2);
-            const widths = {}; ths.forEach((t, idx) => { widths[idx] = t.offsetWidth + 'px'; });
-            localStorage.setItem(key, JSON.stringify(widths));
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-          };
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        });
-      });
-    }
-  }
+  enhanceGanttTable(wrap);
 }
 
 window.toggleGanttRow = function(id) {
@@ -1794,10 +1786,11 @@ function enhanceTable(tableEl, screenId) {
   applyColFilter(tableEl, screenId);
 }
 
-// --- Column Resize ---
+// --- Column Resize (auto-fit on first load) ---
 function applyColResize(tableEl, screenId) {
   const key = 'pj_column_widths_' + screenId;
   const saved = JSON.parse(localStorage.getItem(key) || '{}');
+  const hasSaved = Object.keys(saved).length > 0;
   const thead = tableEl.querySelector('thead');
   if (!thead) return;
   const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
@@ -1805,7 +1798,7 @@ function applyColResize(tableEl, screenId) {
   const ths = [...headerRow.cells];
   ths.forEach((th, i) => {
     th.style.position = 'relative';
-    if (saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
+    if (hasSaved && saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
     handle.className = 'col-resizer';
@@ -1815,7 +1808,7 @@ function applyColResize(tableEl, screenId) {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (e) => { const w = Math.max(30, startW + e.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
       const onUp = () => {
         handle.classList.remove('resizing');
         const ws = {}; ths.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
@@ -1827,6 +1820,14 @@ function applyColResize(tableEl, screenId) {
       document.addEventListener('mouseup', onUp);
     });
   });
+  // Save browser auto-sized widths on first load
+  if (!hasSaved) {
+    requestAnimationFrame(() => {
+      const ws = {};
+      ths.forEach((t, idx) => { if (t.offsetWidth > 0) ws[idx] = t.offsetWidth + 'px'; });
+      if (Object.keys(ws).length > 0) localStorage.setItem(key, JSON.stringify(ws));
+    });
+  }
 }
 
 // --- Column Filter ---
@@ -1920,7 +1921,7 @@ function applyColFilter(tableEl, screenId) {
   });
 }
 
-// --- Column Reorder ---
+// --- Column Reorder (data-col-orig tracking for stable multi-drag) ---
 function applyColReorder(tableEl, screenId) {
   const key = 'pj_column_order_' + screenId;
   const thead = tableEl.querySelector('thead');
@@ -1928,49 +1929,211 @@ function applyColReorder(tableEl, screenId) {
   const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
   if (!headerRow) return;
 
+  // Stamp original indices on th and matching td cells (idempotent)
+  const origThs = [...headerRow.cells];
+  origThs.forEach((th, i) => {
+    if (!th.hasAttribute('data-col-orig')) {
+      th.setAttribute('data-col-orig', i);
+      tableEl.querySelectorAll('tbody tr').forEach(row => {
+        if (row.cells[i]) row.cells[i].setAttribute('data-col-orig', i);
+      });
+    }
+  });
+
   const savedOrder = JSON.parse(localStorage.getItem(key) || 'null');
-  if (savedOrder && savedOrder.length === headerRow.cells.length) {
-    reorderTableCols(tableEl, savedOrder);
+  if (savedOrder && savedOrder.length === origThs.length) {
+    _applyColOrderByOrig(tableEl, savedOrder);
   }
 
   const ths = [...headerRow.cells];
-  let dragIdx = null;
-  ths.forEach((th, i) => {
+  ths.forEach((th) => {
     th.setAttribute('draggable', 'true');
     th.addEventListener('dragstart', (e) => {
-      dragIdx = i; e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => th.style.opacity = '0.4', 0);
+      e.dataTransfer.setData('text/plain', th.getAttribute('data-col-orig'));
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => th.style.opacity = '0.4');
     });
     th.addEventListener('dragend', () => {
       th.style.opacity = '';
       ths.forEach(t => t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
-      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      e.preventDefault();
       ths.forEach(t => t.classList.remove('drag-over'));
       th.classList.add('drag-over');
     });
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
-      if (dragIdx === null || dragIdx === i) return;
-      const order = ths.map((_, idx) => idx);
-      const moved = order.splice(dragIdx, 1)[0];
-      order.splice(i, 0, moved);
-      reorderTableCols(tableEl, order);
-      localStorage.setItem(key, JSON.stringify(order));
+      const srcOrig = parseInt(e.dataTransfer.getData('text/plain'));
+      const tgtOrig = parseInt(th.getAttribute('data-col-orig'));
+      if (isNaN(srcOrig) || isNaN(tgtOrig) || srcOrig === tgtOrig) return;
+      const currentOrder = [...headerRow.cells].map(t => parseInt(t.getAttribute('data-col-orig')));
+      const srcVI = currentOrder.indexOf(srcOrig);
+      const tgtVI = currentOrder.indexOf(tgtOrig);
+      if (srcVI === -1 || tgtVI === -1) return;
+      const newOrder = [...currentOrder];
+      newOrder.splice(tgtVI, 0, newOrder.splice(srcVI, 1)[0]);
+      _applyColOrderByOrig(tableEl, newOrder);
+      localStorage.setItem(key, JSON.stringify(newOrder));
       applyColResize(tableEl, screenId);
       applyColFilter(tableEl, screenId);
-      dragIdx = null;
     });
   });
 }
 
-function reorderTableCols(tableEl, order) {
+function _applyColOrderByOrig(tableEl, orderByOrig) {
   tableEl.querySelectorAll('tr').forEach(row => {
-    if (row.cells.length !== order.length) return;
     const cells = [...row.cells];
-    order.forEach(origIdx => row.appendChild(cells[origIdx]));
+    const origMap = {};
+    cells.forEach(cell => {
+      const o = cell.getAttribute('data-col-orig');
+      if (o !== null) origMap[parseInt(o)] = cell;
+    });
+    if (Object.keys(origMap).length === 0) {
+      if (cells.length !== orderByOrig.length) return;
+      orderByOrig.forEach(origIdx => row.appendChild(cells[origIdx]));
+    } else {
+      orderByOrig.forEach(origIdx => { if (origMap[origIdx] !== undefined) row.appendChild(origMap[origIdx]); });
+    }
+  });
+}
+
+// --- Gantt-specific enhance (fixed columns only) ---
+function enhanceGanttTable(wrap) {
+  const table = wrap.querySelector('table');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  if (!thead) return;
+  const firstRow = thead.querySelector('tr:first-child');
+  if (!firstRow) return;
+  const fixedThs = [...firstRow.cells].filter(th => th.rowSpan >= 2);
+  if (fixedThs.length === 0) return;
+
+  // Resize
+  const resizeKey = 'pj_column_widths_gantt';
+  const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
+  const hasSavedW = Object.keys(savedW).length > 0;
+  fixedThs.forEach((th, i) => {
+    th.style.position = 'relative';
+    if (hasSavedW && savedW[i]) { th.style.width = savedW[i]; th.style.minWidth = savedW[i]; }
+    th.querySelectorAll('.col-resizer').forEach(r => r.remove());
+    const handle = document.createElement('div');
+    handle.className = 'col-resizer'; handle.setAttribute('draggable', 'false');
+    th.appendChild(handle);
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      handle.classList.add('resizing');
+      const startX = e.clientX, startW = th.offsetWidth;
+      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onUp = () => {
+        handle.classList.remove('resizing');
+        const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
+        localStorage.setItem(resizeKey, JSON.stringify(ws));
+        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+  });
+  if (!hasSavedW) {
+    requestAnimationFrame(() => {
+      const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
+      if (Object.keys(ws).length > 0) localStorage.setItem(resizeKey, JSON.stringify(ws));
+    });
+  }
+
+  // Filter (fixed columns only)
+  const filterKey = 'pj_filters_gantt';
+  const savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
+  const trs = [...table.querySelectorAll('tbody tr')];
+  function applyGanttFilter() {
+    trs.forEach(tr => {
+      let visible = true;
+      Object.entries(savedF).forEach(([ci, allowed]) => {
+        if (!allowed) return;
+        const td = tr.cells[parseInt(ci)];
+        const val = td ? td.textContent.trim() : '';
+        if (!allowed.includes(val)) visible = false;
+      });
+      tr.style.display = visible ? '' : 'none';
+    });
+    localStorage.setItem(filterKey, JSON.stringify(savedF));
+  }
+  applyGanttFilter();
+  fixedThs.forEach((th, colIdx) => {
+    th.querySelectorAll('.filter-btn').forEach(b => b.remove());
+    const vals = [...new Set(trs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
+    if (vals.length === 0) return;
+    const btn = document.createElement('span');
+    btn.className = 'filter-btn' + (savedF[colIdx] ? ' active' : '');
+    btn.textContent = '▼'; btn.title = 'フィルター'; th.appendChild(btn);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      document.querySelectorAll('.col-filter-dropdown').forEach(d => d.remove());
+      const selected = savedF[colIdx] || vals;
+      const dd = document.createElement('div'); dd.className = 'col-filter-dropdown';
+      const allWrap = document.createElement('div');
+      allWrap.style.cssText = 'padding:4px 0;border-bottom:1px solid #eee;margin-bottom:6px;font-weight:600;display:flex;align-items:center;gap:6px;';
+      const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.checked = !savedF[colIdx];
+      allWrap.appendChild(allCb); allWrap.appendChild(document.createTextNode('すべて選択')); dd.appendChild(allWrap);
+      const itemCbs = [];
+      vals.forEach(val => {
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;';
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = val; cb.checked = selected.includes(val);
+        lbl.appendChild(cb); lbl.appendChild(document.createTextNode(val)); dd.appendChild(lbl); itemCbs.push(cb);
+        cb.addEventListener('change', () => {
+          const checked = itemCbs.filter(c => c.checked).map(c => c.value);
+          savedF[colIdx] = checked.length === vals.length ? null : checked;
+          allCb.checked = !savedF[colIdx]; btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+        });
+      });
+      allCb.addEventListener('change', () => {
+        savedF[colIdx] = allCb.checked ? null : [];
+        itemCbs.forEach(c => c.checked = allCb.checked);
+        btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+      });
+      const rect = btn.getBoundingClientRect();
+      dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom + 2) + 'px';
+      document.body.appendChild(dd);
+      setTimeout(() => {
+        document.addEventListener('click', function closeDD(ev) {
+          if (!dd.contains(ev.target)) { dd.remove(); document.removeEventListener('click', closeDD); }
+        });
+      }, 0);
+    });
+  });
+
+  // Reorder (save as key array, triggers re-render)
+  const reorderKey = 'pj_column_order_gantt';
+  fixedThs.forEach((th) => {
+    th.setAttribute('draggable', 'true');
+    th.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', th.getAttribute('data-col-key') || '');
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => th.style.opacity = '0.4');
+    });
+    th.addEventListener('dragend', () => {
+      th.style.opacity = ''; fixedThs.forEach(t => t.classList.remove('drag-over'));
+    });
+    th.addEventListener('dragover', (e) => {
+      e.preventDefault(); fixedThs.forEach(t => t.classList.remove('drag-over')); th.classList.add('drag-over');
+    });
+    th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+    th.addEventListener('drop', (e) => {
+      e.preventDefault(); th.classList.remove('drag-over');
+      const srcKey = e.dataTransfer.getData('text/plain');
+      const tgtKey = th.getAttribute('data-col-key');
+      if (!srcKey || !tgtKey || srcKey === tgtKey) return;
+      const currentKeys = [...firstRow.cells].filter(t => t.rowSpan >= 2).map(t => t.getAttribute('data-col-key'));
+      const srcVI = currentKeys.indexOf(srcKey);
+      const tgtVI = currentKeys.indexOf(tgtKey);
+      if (srcVI === -1 || tgtVI === -1) return;
+      const newKeys = [...currentKeys];
+      newKeys.splice(tgtVI, 0, newKeys.splice(srcVI, 1)[0]);
+      localStorage.setItem(reorderKey, JSON.stringify(newKeys));
+      drawGantt();
+    });
   });
 }
 
