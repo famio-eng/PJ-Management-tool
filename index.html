@@ -61,15 +61,27 @@ tr:hover td{background:#fafbff}
 .btn-outline{background:#fff;border:1px solid #ccc;color:#333}
 .btn-sm{padding:3px 8px;font-size:11px}
 /* NW Graph */
-#nw-wrap{display:flex;gap:0;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
-#nw-svg-container{flex:1;min-height:560px;position:relative;overflow:hidden;cursor:grab;background:#f8f9fc}
+#nw-wrap{display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
+#nw-svg-container{flex:1;min-height:520px;position:relative;overflow:hidden;cursor:grab;background:#f8f9fc}
 #nw-svg-container:active{cursor:grabbing}
 #nw-svg{width:100%;height:100%}
-#nw-panel{width:270px;border-left:1px solid #e0e0e0;padding:14px;overflow-y:auto;font-size:12px;background:#fff;flex-shrink:0}
-#nw-panel h3{font-size:13px;font-weight:600;margin-bottom:10px;color:#1a3a5c}
+#nw-panel{border-top:1px solid #e0e0e0;padding:8px 14px;overflow-y:auto;font-size:12px;background:#fff;max-height:190px}
+#nw-panel h3{font-size:12px;font-weight:600;margin-bottom:6px;color:#1a3a5c}
+.nw-detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 10px}
+.nw-detail-cell{font-size:11px}
+.nw-detail-cell .nw-detail-label{display:block;color:#888;margin-bottom:1px}
+.nw-detail-cell .nw-detail-val{font-weight:500}
 .nw-detail-row{display:flex;margin-bottom:6px;gap:6px}
 .nw-detail-label{width:80px;font-size:11px;color:#888;flex-shrink:0}
 .nw-detail-val{flex:1;font-weight:500}
+/* NW Subgraph modal */
+#nw-sub-modal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:2000;display:flex;align-items:center;justify-content:center}
+#nw-sub-modal .sub-panel{background:#fff;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.28);width:88vw;max-width:1200px;height:72vh;display:flex;flex-direction:column;overflow:hidden}
+#nw-sub-modal .sub-hdr{padding:9px 14px;border-bottom:1px solid #dde4f0;background:#f5f8ff;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#nw-sub-svg-container{flex:1;overflow:hidden}
+#nw-sub-svg{width:100%;height:100%}
+body.dark #nw-sub-modal .sub-panel{background:#16213e;border-color:#3a3a5c}
+body.dark #nw-sub-modal .sub-hdr{background:#1a2535;border-color:#3a3a5c}
 .nw-controls{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
 /* Timeline */
 .tl-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
@@ -181,6 +193,7 @@ body.dark .file-area{background:#1e2a45;border-color:#3a3a5c;color:#888}
 body.dark #nw-panel{background:#16213e;border-color:#3a3a5c}
 body.dark #nw-svg-container{background:#1a1a2e}
 body.dark .nw-detail-label{color:#7a8a9a}
+body.dark .nw-detail-cell .nw-detail-label{color:#7a8a9a}
 body.dark .gantt-table th{background:#1e2a45;border-color:#3a3a5c}
 body.dark .gantt-table td{border-color:#2a2a4a}
 body.dark .gantt-controls{border-color:#3a3a5c}
@@ -1413,11 +1426,13 @@ function renderNW() {
       <span class="text-muted">${nodes.length}ノード表示中</span>
     </div>
     <div id="nw-wrap">
-      <div id="nw-svg-container" style="height:560px">
+      <div id="nw-svg-container" style="height:520px">
         <svg id="nw-svg"></svg>
       </div>
       <div id="nw-panel">
-        <h3>タスク詳細</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <h3 style="margin:0">タスク詳細</h3>
+        </div>
         <div id="nw-detail"><p class="text-muted" style="font-size:11px">ノードをクリックして詳細を表示</p></div>
       </div>
     </div>`;
@@ -1463,17 +1478,17 @@ function renderNW() {
   // Nodes
   nodes.forEach(n => {
     const isClose = n.status === 'Close';
-    const statusBgColor = isClose ? '#D9D9D9' : ({
+    const statusBgColor = isClose ? '#909090' : ({
       'On-going': '#E2EFDA', 'Delay': '#FFE0E0',
       'nActive': '#F2F2F2', 'Disable': '#F2F2F2'
     }[n.status] || '#fff');
-    const statusBorderColor = isClose ? '#AAAAAA' : ({
+    const statusBorderColor = isClose ? '#666666' : ({
       'On-going': '#00B050', 'Delay': '#FF0000',
       'nActive': '#808080', 'Disable': '#BFBFBF'
     }[n.status] || '#ccc');
     const isCP = !isClose && n.critical === 'はい';
     const isSelected = n.id === state.nwSelectedId;
-    const textColor = isClose ? '#888888' : '#222';
+    const textColor = isClose ? '#555555' : '#222';
 
     const ng = g.append('g').attr('class', 'nw-node')
       .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
@@ -1499,7 +1514,7 @@ function renderNW() {
 
     // WBS number
     ng.append('text').attr('x', 8).attr('y', 13)
-      .attr('font-size', '9px').attr('fill', isClose ? '#AAAAAA' : '#888').text(n.wbs);
+      .attr('font-size', '9px').attr('fill', isClose ? '#666666' : '#888').text(n.wbs);
 
     // Task name (wrap at ~22 chars)
     const name = n.name;
@@ -1515,17 +1530,17 @@ function renderNW() {
 
     // Separator line
     ng.append('line').attr('x1', 6).attr('x2', NW - 6).attr('y1', 58).attr('y2', 58)
-      .attr('stroke', isClose ? '#BBBBBB' : '#ddd').attr('stroke-width', 1);
+      .attr('stroke', isClose ? '#888888' : '#ddd').attr('stroke-width', 1);
 
     // Status + pct
     ng.append('text').attr('x', NW / 2).attr('y', 71)
-      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#888888' : '#555')
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#555555' : '#555')
       .text(`${n.status} | ${n.pct}%`);
 
     // Resource (担当)
     const resLabel = (n.resource || '—').length > 22 ? (n.resource || '—').slice(0, 21) + '…' : (n.resource || '—');
     ng.append('text').attr('x', NW / 2).attr('y', 87)
-      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#AAAAAA' : '#4472C4')
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#666666' : '#4472C4')
       .text(`担当: ${resLabel}`);
 
     ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>WBS: ${n.wbs}<br>担当: ${n.resource||'—'}<br>ステータス: ${n.status}<br>達成率: ${n.pct}%${isCP ? '<br>🔴 クリティカルパス' : ''}`))
@@ -1562,27 +1577,48 @@ function selectNWNode(id) {
   const commentKey = `${id}_${weekKey}`;
   const existingComment = state.comments[commentKey];
   document.getElementById('nw-detail').innerHTML = `
-    <div class="nw-detail-row"><div class="nw-detail-label">タスク名</div><div class="nw-detail-val" style="font-weight:700">${task.name}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">WBS番号</div><div class="nw-detail-val">${task.wbs}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">担当部門</div><div class="nw-detail-val">${task.resource||'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">基準開始日</div><div class="nw-detail-val">${task.bstart||'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">基準終了日</div><div class="nw-detail-val">${task.bend||'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">達成率</div><div class="nw-detail-val">${pctBar(task.pct)}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">ステータス</div><div class="nw-detail-val">${statusBadge(task.status)}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">CP</div><div class="nw-detail-val">${task.critical==='はい'?'<span class="cp-badge">CP</span>':'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">Note</div><div class="nw-detail-val">${task.note||'—'}</div></div>
-    <hr style="margin:10px 0;border-color:#eee">
-    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+    <div class="nw-detail-grid">
+      <div class="nw-detail-cell" style="grid-column:span 2">
+        <span class="nw-detail-label">タスク名</span>
+        <span class="nw-detail-val" style="font-weight:700">${task.name}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">WBS番号</span>
+        <span class="nw-detail-val">${task.wbs}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">ステータス</span>
+        <span class="nw-detail-val">${statusBadge(task.status)}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">担当部門</span>
+        <span class="nw-detail-val">${task.resource||'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">達成率</span>
+        <span class="nw-detail-val">${pctBar(task.pct)}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">基準開始日</span>
+        <span class="nw-detail-val">${task.bstart||'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">基準終了日</span>
+        <span class="nw-detail-val">${task.bend||'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">CP</span>
+        <span class="nw-detail-val">${task.critical==='はい'?'<span class="cp-badge">CP</span>':'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">Note</span>
+        <span class="nw-detail-val">${task.note||'—'}</span>
+      </div>
+    </div>
+    <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-secondary btn-sm" onclick="state.nwMode='sub';state.nwSubDepth=2;renderNW()">周辺NWを表示</button>
       <button class="btn btn-sm btn-outline" onclick="showNWSubPanel(${id})">サブグラフを表示</button>
-    </div>
-    <hr style="margin:12px 0;border-color:#eee">
-    <div style="color:#AAAAAA;font-style:italic;font-size:11px;line-height:1.8">
-      【Phase 2 追加予定】<br>
-      ・トータルフロート（TF）<br>
-      ・フリーフロート（FF）<br>
-      ・最早開始日（ES）/ 最早終了日（EF）<br>
-      ・最遅開始日（LS）/ 最遅終了日（LF）
+      <span style="color:#AAAAAA;font-style:italic;font-size:10px;margin-left:8px">【Phase 2 予定】TF / FF / ES / EF / LS / LF</span>
     </div>`;
   // Highlight selected node
   renderNW();
@@ -1616,46 +1652,52 @@ window.showNWContextMenu = function(event, id) {
   }, 10);
 };
 
-// NW subgraph bottom panel
+// NW subgraph modal window
 window.showNWSubPanel = function(id) {
   state.nwSubPanelId = id;
   if (!state.nwSubPanelDepth) state.nwSubPanelDepth = 2;
   const task = state.tasks.find(t => t.id === id);
-  const wrap = document.getElementById('nw-wrap');
-  if (!wrap) return;
-  let panel = document.getElementById('nw-sub-panel');
-  if (!panel) {
-    wrap.insertAdjacentHTML('beforeend', `
-      <div id="nw-sub-panel" style="border-top:2px solid #4472C4;margin-top:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f5f8ff;border-bottom:1px solid #dde4f0">
-          <span style="font-weight:600;font-size:12px">サブグラフ: <span id="nw-sub-title"></span></span>
-          <div style="display:flex;align-items:center;gap:12px">
-            <label style="font-size:11px;display:flex;align-items:center;gap:6px">
-              深さ:
-              <input type="range" id="nw-sub-depth-slider" min="1" max="5" value="2"
-                style="width:90px;vertical-align:middle"
-                oninput="state.nwSubPanelDepth=+this.value;document.getElementById('nw-sub-depth-val').textContent=this.value;drawNWSubPanel()">
-              <span id="nw-sub-depth-val">2</span>
-            </label>
-            <button class="btn btn-sm btn-outline" onclick="closeNWSubPanel()">✕ 閉じる</button>
-          </div>
-        </div>
-        <div id="nw-sub-svg-container" style="height:320px;overflow:hidden">
-          <svg id="nw-sub-svg" style="width:100%;height:100%"></svg>
-        </div>
-      </div>`);
-    panel = document.getElementById('nw-sub-panel');
-  }
-  const titleEl = document.getElementById('nw-sub-title');
-  if (titleEl) titleEl.textContent = task ? task.name : String(id);
-  const slider = document.getElementById('nw-sub-depth-slider');
-  if (slider) { slider.value = state.nwSubPanelDepth; document.getElementById('nw-sub-depth-val').textContent = state.nwSubPanelDepth; }
+  const depth = state.nwSubPanelDepth;
+
+  // Remove existing modal
+  d3.select('#nw-sub-modal').remove();
+
+  const isDark = document.body.classList.contains('dark');
+  const modalBg = isDark ? '#16213e' : '#fff';
+  const hdrBg  = isDark ? '#1a2535' : '#f5f8ff';
+  const hdrBdr = isDark ? '#3a3a5c' : '#dde4f0';
+
+  const overlay = d3.select('body').append('div').attr('id', 'nw-sub-modal');
+
+  const panel = overlay.append('div').attr('class', 'sub-panel');
+
+  // Header
+  const hdr = panel.append('div').attr('class', 'sub-hdr');
+  hdr.append('span')
+    .style('font-weight', '600').style('font-size', '13px')
+    .html(`サブグラフ: <span id="nw-sub-title">${task ? task.name : id}</span>`);
+  const ctrl = hdr.append('div').style('display', 'flex').style('align-items', 'center').style('gap', '12px');
+  ctrl.append('label')
+    .style('font-size', '11px').style('display', 'flex').style('align-items', 'center').style('gap', '6px')
+    .html(`深さ:
+      <input type="range" id="nw-sub-depth-slider" min="1" max="5" value="${depth}" style="width:90px"
+        oninput="state.nwSubPanelDepth=+this.value;document.getElementById('nw-sub-depth-val').textContent=this.value;drawNWSubPanel()">
+      <span id="nw-sub-depth-val">${depth}</span>`);
+  ctrl.append('button').attr('class', 'btn btn-sm btn-outline')
+    .text('✕ 閉じる').on('click', () => closeNWSubPanel());
+
+  // SVG area
+  panel.append('div').attr('id', 'nw-sub-svg-container')
+    .append('svg').attr('id', 'nw-sub-svg');
+
+  // Close on backdrop click
+  overlay.on('click', (e) => { if (e.target === overlay.node()) closeNWSubPanel(); });
+
   drawNWSubPanel();
 };
 
 window.closeNWSubPanel = function() {
-  const panel = document.getElementById('nw-sub-panel');
-  if (panel) panel.remove();
+  d3.select('#nw-sub-modal').remove();
   state.nwSubPanelId = null;
 };
 
@@ -1722,11 +1764,11 @@ function drawNWSubPanel() {
   // Nodes
   nodes.forEach(n => {
     const isClose = n.status === 'Close';
-    const bgColor = isClose ? '#D9D9D9' : ({'On-going':'#E2EFDA','Delay':'#FFE0E0','nActive':'#F2F2F2','Disable':'#F2F2F2'}[n.status] || '#fff');
-    const borderColor = isClose ? '#AAAAAA' : ({'On-going':'#00B050','Delay':'#FF0000','nActive':'#808080','Disable':'#BFBFBF'}[n.status] || '#ccc');
+    const bgColor = isClose ? '#909090' : ({'On-going':'#E2EFDA','Delay':'#FFE0E0','nActive':'#F2F2F2','Disable':'#F2F2F2'}[n.status] || '#fff');
+    const borderColor = isClose ? '#666666' : ({'On-going':'#00B050','Delay':'#FF0000','nActive':'#808080','Disable':'#BFBFBF'}[n.status] || '#ccc');
     const isCP = !isClose && n.critical === 'はい';
     const isFocus = n.id === id;
-    const textColor = isClose ? '#888888' : '#222';
+    const textColor = isClose ? '#555555' : '#222';
 
     const ng = g.append('g').attr('class', 'nw-node')
       .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
@@ -1746,7 +1788,7 @@ function drawNWSubPanel() {
     }
 
     ng.append('text').attr('x', 8).attr('y', 13).attr('font-size', '9px')
-      .attr('fill', isClose ? '#AAAAAA' : '#888').text(n.wbs);
+      .attr('fill', isClose ? '#666666' : '#888').text(n.wbs);
 
     const line1 = n.name.slice(0, 22);
     const line2 = n.name.length > 22 ? n.name.slice(22, 42) + (n.name.length > 42 ? '…' : '') : '';
@@ -1759,16 +1801,16 @@ function drawNWSubPanel() {
     }
 
     ng.append('line').attr('x1', 6).attr('x2', NW - 6).attr('y1', 58).attr('y2', 58)
-      .attr('stroke', isClose ? '#BBBBBB' : '#ddd').attr('stroke-width', 1);
+      .attr('stroke', isClose ? '#888888' : '#ddd').attr('stroke-width', 1);
 
     ng.append('text').attr('x', NW / 2).attr('y', 71)
       .attr('text-anchor', 'middle').attr('font-size', '10px')
-      .attr('fill', isClose ? '#888888' : '#555').text(`${n.status} | ${n.pct}%`);
+      .attr('fill', isClose ? '#555555' : '#555').text(`${n.status} | ${n.pct}%`);
 
     const resLabel = (n.resource || '—').length > 22 ? (n.resource || '—').slice(0, 21) + '…' : (n.resource || '—');
     ng.append('text').attr('x', NW / 2).attr('y', 87)
       .attr('text-anchor', 'middle').attr('font-size', '10px')
-      .attr('fill', isClose ? '#AAAAAA' : '#4472C4').text(`担当: ${resLabel}`);
+      .attr('fill', isClose ? '#666666' : '#4472C4').text(`担当: ${resLabel}`);
 
     ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>担当: ${n.resource||'—'}<br>ステータス: ${n.status}<br>達成率: ${n.pct}%`))
       .on('mouseout', hideTooltip);
