@@ -1671,7 +1671,6 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
   return '<!DOCTYPE html>\n' +
 '<html lang="ja"><head><meta charset="UTF-8">' +
 '<title>サブグラフ: ' + focusTitle + '</title>' +
-'<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></' + 'script>' +
 '<style>' +
 '*{box-sizing:border-box;margin:0;padding:0}' +
 'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}' +
@@ -1699,6 +1698,8 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '<div id="ctnr"><svg id="sv"></svg></div>' +
 '<div id="tip"></div>' +
 '<script>' +
+'const d3=window.opener&&window.opener.d3?window.opener.d3:window.parent&&window.parent.d3?window.parent.d3:null;' +
+'if(!d3){document.body.innerHTML=\'<p style="padding:30px;color:#c00;font-size:14px">エラー: D3が取得できません。ポップアップを許可してください。</p>\';}' +
 'const ALL=' + tasksJson + ';' +
 'let fid=' + focusId + ', dep=' + initDepth + ', _z, _sv;' +
 'function bG(tasks){' +
@@ -1723,6 +1724,8 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '  nodes.forEach(n=>{const d=dep2[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});' +
 '}' +
 'function draw(){' +
+'  const ct=document.getElementById("ctnr");' +
+'  if(!ct||ct.clientWidth===0){requestAnimationFrame(draw);return;}' +
 '  const reg=ALL.filter(t=>!t.isSummary&&t.active!=="いいえ");' +
 '  const sel=new Set([fid]);const ae=[];' +
 '  reg.forEach(t=>{if(!t.pred)return;t.pred.split(",").map(s=>parseInt(s.trim())).forEach(p=>ae.push({source:p,target:t.id}));});' +
@@ -1730,7 +1733,6 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '  const sub=reg.filter(t=>sel.has(t.id));' +
 '  const{nodes,edges}=bG(sub);cL(nodes,edges);' +
 '  const NW=190,NH=96;' +
-'  const ct=document.getElementById("ctnr");' +
 '  const cW=ct.clientWidth,cH=ct.clientHeight;' +
 '  const svg=d3.select("#sv").attr("width",cW).attr("height",cH);' +
 '  svg.selectAll("*").remove();' +
@@ -1780,8 +1782,7 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '  }' +
 '}' +
 'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}' +
-'window.addEventListener("resize",draw);' +
-'window.addEventListener("load",function(){setTimeout(draw,50);});' +
+'window.addEventListener("resize",draw);if(d3)draw();' +
 '<\/script></body></html>';
 }
 
