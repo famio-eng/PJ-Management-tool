@@ -1651,143 +1651,151 @@ window.showNWSubPanel = function(id) {
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
 
-  // Serialize task data; escape closing-script tags to prevent HTML injection
   const tasksJson = JSON.stringify(state.tasks).replace(/<\/script/gi, '<\\/script');
-
   const html = buildSubgraphWindowHTML(id, title, depth, tasksJson);
 
-  const win = window.open('', 'nw_sub_' + id,
+  // Use Blob URL so the new window loads as a proper HTML document
+  // (avoids all document.write timing and D3 injection issues)
+  const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, 'nw_sub_' + id,
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
-  if (!win) { alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
-  // Inject D3 directly onto the new window before document.write so the
-  // inline script can access it synchronously without any network request.
-  win._injectedD3 = d3;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  if (!win) {
+    alert('ポップアップがブロックされています。ブラウザの設定で許可してください。');
+    URL.revokeObjectURL(blobUrl);
+    return;
+  }
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   win.focus();
 };
 
 window.closeNWSubPanel = function() { /* no-op: new-window approach */ };
 
 function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
-  return '<!DOCTYPE html>\n' +
-'<html lang="ja"><head><meta charset="UTF-8">' +
-'<title>サブグラフ: ' + focusTitle + '</title>' +
-'<style>' +
-'*{box-sizing:border-box;margin:0;padding:0}' +
-'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}' +
-'#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}' +
-'#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}' +
-'#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}' +
-'#ctnr:active{cursor:grabbing}' +
-'svg{width:100%;height:100%}' +
-'.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}' +
-'.btn:hover{background:#e8eef8}' +
-'label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}' +
-'#dv{font-size:12px;font-weight:700;min-width:14px}' +
-'#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}' +
-'</style></head><body>' +
-'<div id="hdr">' +
-'  <h2>サブグラフ: <span id="ft">' + focusTitle + '</span></h2>' +
-'  <label>深さ:' +
-'    <input type="range" id="ds" min="1" max="5" value="' + initDepth + '" style="width:80px"' +
-'      oninput="dep=+this.value;document.getElementById(\'dv\').textContent=this.value;draw()">' +
-'    <span id="dv">' + initDepth + '</span>' +
-'  </label>' +
-'  <button class="btn" onclick="resetZ()">ズームリセット</button>' +
-'  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>' +
-'</div>' +
-'<div id="ctnr"><svg id="sv"></svg></div>' +
-'<div id="tip"></div>' +
-'<script>' +
-'const d3=window._injectedD3||(window.opener&&window.opener._injectedD3)||null;' +
-'if(!d3){document.body.innerHTML=\'<p style="padding:30px;color:#c00;font-size:14px">エラー: D3ライブラリが取得できませんでした。</p>\';throw new Error("D3 not available");}' +
-'const ALL=' + tasksJson + ';' +
-'let fid=' + focusId + ', dep=' + initDepth + ', _z, _sv;' +
-'function bG(tasks){' +
-'  const ns=tasks.map(t=>({...t})), ids=new Set(ns.map(n=>n.id)), es=[];' +
-'  ns.forEach(n=>{if(!n.pred)return;n.pred.split(",").map(s=>parseInt(s.trim())).filter(p=>ids.has(p)).forEach(p=>es.push({source:p,target:n.id}));});' +
-'  return{nodes:ns,edges:es};' +
-'}' +
-'function cL(nodes,edges){' +
-'  if(!nodes.length)return;' +
-'  const ids=new Set(nodes.map(n=>n.id)),succ={},ind={};' +
-'  nodes.forEach(n=>{succ[n.id]=[];ind[n.id]=0;});' +
-'  edges.forEach(e=>{if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});' +
-'  const dep2={},q=nodes.filter(n=>ind[n.id]===0).map(n=>n.id);' +
-'  q.forEach(id=>{dep2[id]=0;});' +
-'  const vis=new Set(q);' +
-'  while(q.length){const id=q.shift();succ[id].forEach(sid=>{dep2[sid]=Math.max(dep2[sid]||0,(dep2[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}' +
-'  const bd={};' +
-'  nodes.forEach(n=>{const d=dep2[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});' +
-'  const NW=190,NH=96,CG=60,RG=14;' +
-'  const ch={};Object.entries(bd).forEach(([d,c])=>{ch[d]=c.length*(NH+RG)-RG;});' +
-'  const mh=Math.max(...Object.values(ch));' +
-'  nodes.forEach(n=>{const d=dep2[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});' +
-'}' +
-'function draw(){' +
-'  const ct=document.getElementById("ctnr");' +
-'  const cW=(ct&&ct.clientWidth>10?ct.clientWidth:0)||(window.innerWidth||1000);' +
-'  const cH=(ct&&ct.clientHeight>10?ct.clientHeight:0)||Math.max((window.innerHeight||700)-62,300);' +
-'  if(cW<10){setTimeout(draw,50);return;}' +
-'  const reg=ALL.filter(t=>!t.isSummary&&t.active!=="いいえ");' +
-'  const sel=new Set([fid]);const ae=[];' +
-'  reg.forEach(t=>{if(!t.pred)return;t.pred.split(",").map(s=>parseInt(s.trim())).forEach(p=>ae.push({source:p,target:t.id}));});' +
-'  for(let i=0;i<dep;i++){const add=new Set();ae.forEach(e=>{if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(id=>sel.add(id));}' +
-'  const sub=reg.filter(t=>sel.has(t.id));' +
-'  const{nodes,edges}=bG(sub);cL(nodes,edges);' +
-'  const NW=190,NH=96;' +
-'  const svg=d3.select("#sv").attr("width",cW).attr("height",cH);' +
-'  svg.selectAll("*").remove();' +
-'  const defs=svg.append("defs");' +
-'  ["normal","cp"].forEach(type=>{' +
-'    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")' +
-'      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");' +
-'  });' +
-'  const g=svg.append("g");' +
-'  const nm={};nodes.forEach(n=>{nm[n.id]=n;});' +
-'  edges.forEach(e=>{' +
-'    const s=nm[e.source],t=nm[e.target];if(!s||!t)return;' +
-'    const cp=s.critical==="はい"&&t.critical==="はい";' +
-'    const sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;' +
-'    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)' +
-'      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)' +
-'      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);' +
-'  });' +
-'  nodes.forEach(n=>{' +
-'    const ic=n.status==="Close";' +
-'    const bg=ic?"#606060":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");' +
-'    const bd=ic?"#404040":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");' +
-'    const icp=!ic&&n.critical==="はい",ifo=n.id===fid;' +
-'    const tc=ic?"#d0d0d0":"#222";' +
-'    const ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")' +
-'      .on("click",function(){fid=n.id;var t=ALL.find(x=>x.id===n.id);document.getElementById("ft").textContent=t?t.name:n.id;draw();})' +
-'      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})' +
-'      .on("mouseout",function(){document.getElementById("tip").style.display="none";});' +
-'    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg)' +
-'      .attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);' +
-'    if(icp){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}' +
-'    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#404040":"#888").text(n.wbs);' +
-'    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";' +
-'    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);' +
-'    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);' +
-'    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#666":"#ddd").attr("stroke-width",1);' +
-'    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#303030":"#555").text(n.status+" | "+n.pct+"%");' +
-'    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");' +
-'    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#404040":"#4472C4").text("担当: "+res);' +
-'  });' +
-'  const z=d3.zoom().scaleExtent([0.1,4]).on("zoom",ev=>g.attr("transform",ev.transform));' +
-'  svg.call(z);_z=z;_sv=svg;' +
-'  if(nodes.length){' +
-'    const mx=Math.max(...nodes.map(n=>n.gx))+NW+60,my=Math.max(...nodes.map(n=>n.gy))+NH+60;' +
-'    const sc=Math.min(1,(cW-40)/mx,(cH-40)/my);' +
-'    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));' +
-'  }' +
-'}' +
-'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}' +
-'window.addEventListener("resize",draw);if(d3){setTimeout(draw,0);}' +
-'<\/script></body></html>';
+  // NOTE: This HTML is opened via Blob URL (window.open(URL.createObjectURL(blob))).
+  // Scripts run in a real page-load context, so window.onload and CDN scripts work reliably.
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<title>サブグラフ: ${esc(focusTitle)}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}
+#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}
+#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}
+#ctnr:active{cursor:grabbing}
+svg{display:block}
+.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}
+.btn:hover{background:#e8eef8}
+label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}
+#dv{font-size:12px;font-weight:700;min-width:14px}
+#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}
+</style></head><body>
+<div id="hdr">
+  <h2>サブグラフ: <span id="ft">${esc(focusTitle)}</span></h2>
+  <label>深さ:
+    <input type="range" id="ds" min="1" max="5" value="${initDepth}" style="width:80px" oninput="dep=+this.value;document.getElementById('dv').textContent=this.value;draw()">
+    <span id="dv">${initDepth}</span>
+  </label>
+  <button class="btn" onclick="resetZ()">ズームリセット</button>
+  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>
+</div>
+<div id="ctnr"><svg id="sv"></svg></div>
+<div id="tip"></div>
+<script>
+const ALL=${tasksJson};
+let fid=${focusId}, dep=${initDepth}, _z, _sv;
+function bG(tasks){
+  const ns=tasks.map(t=>({...t})),ids=new Set(ns.map(n=>n.id)),es=[];
+  ns.forEach(n=>{if(!n.pred)return;n.pred.split(",").map(s=>parseInt(s.trim())).filter(p=>ids.has(p)).forEach(p=>es.push({source:p,target:n.id}));});
+  return{nodes:ns,edges:es};
+}
+function cL(nodes,edges){
+  if(!nodes.length)return;
+  const ids=new Set(nodes.map(n=>n.id)),succ={},ind={};
+  nodes.forEach(n=>{succ[n.id]=[];ind[n.id]=0;});
+  edges.forEach(e=>{if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});
+  const dep2={},q=nodes.filter(n=>ind[n.id]===0).map(n=>n.id);
+  q.forEach(id=>{dep2[id]=0;});
+  const vis=new Set(q);
+  while(q.length){const id=q.shift();succ[id].forEach(sid=>{dep2[sid]=Math.max(dep2[sid]||0,(dep2[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}
+  const bd={};
+  nodes.forEach(n=>{const d=dep2[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});
+  const NW=190,NH=96,CG=60,RG=14;
+  const ch={};Object.entries(bd).forEach(([d,c])=>{ch[d]=c.length*(NH+RG)-RG;});
+  const mh=Math.max(...Object.values(ch));
+  nodes.forEach(n=>{const d=dep2[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});
+}
+function draw(){
+  const ct=document.getElementById("ctnr");
+  const cW=ct.clientWidth, cH=ct.clientHeight;
+  const NW=190,NH=96;
+  // Include the focus task even if it is a summary task
+  const reg=ALL.filter(t=>t.active!=="いいえ");
+  const sel=new Set([fid]);const ae=[];
+  reg.forEach(t=>{if(!t.pred)return;t.pred.split(",").map(s=>parseInt(s.trim())).forEach(p=>ae.push({source:p,target:t.id}));});
+  for(let i=0;i<dep;i++){const add=new Set();ae.forEach(e=>{if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(id=>sel.add(id));}
+  const sub=reg.filter(t=>sel.has(t.id));
+  if(!sub.length){
+    const svg=d3.select("#sv").attr("width",cW).attr("height",cH);
+    svg.selectAll("*").remove();
+    svg.append("text").attr("x",cW/2).attr("y",cH/2).attr("text-anchor","middle").attr("font-size","14px").attr("fill","#888").text("関連タスクが見つかりません（深さを増やしてください）");
+    return;
+  }
+  const{nodes,edges}=bG(sub);cL(nodes,edges);
+  const svg=d3.select("#sv").attr("width",cW).attr("height",cH);
+  svg.selectAll("*").remove();
+  const defs=svg.append("defs");
+  ["normal","cp"].forEach(type=>{
+    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")
+      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");
+  });
+  const g=svg.append("g");
+  const nm={};nodes.forEach(n=>{nm[n.id]=n;});
+  edges.forEach(e=>{
+    const s=nm[e.source],t=nm[e.target];if(!s||!t)return;
+    const cp=s.critical==="はい"&&t.critical==="はい";
+    const sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;
+    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)
+      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)
+      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);
+  });
+  nodes.forEach(n=>{
+    const ic=n.status==="Close";
+    const bg=ic?"#D9D9D9":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");
+    const bd=ic?"#AAAAAA":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");
+    const icp=!ic&&n.critical==="はい",ifo=n.id===fid;
+    const tc=ic?"#888":"#222";
+    const ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")
+      .on("click",function(){fid=n.id;var t=ALL.find(x=>x.id===n.id);document.getElementById("ft").textContent=t?t.name:n.id;draw();})
+      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})
+      .on("mouseout",function(){document.getElementById("tip").style.display="none";});
+    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg)
+      .attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);
+    if(icp&&!ic){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}
+    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#aaa":"#888").text(n.wbs);
+    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";
+    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);
+    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);
+    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#bbb":"#ddd").attr("stroke-width",1);
+    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#555").text(n.status+" | "+n.pct+"%");
+    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");
+    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#4472C4").text("担当: "+res);
+  });
+  const z=d3.zoom().scaleExtent([0.1,4]).on("zoom",ev=>g.attr("transform",ev.transform));
+  svg.call(z);_z=z;_sv=svg;
+  if(nodes.length){
+    const mx=Math.max(...nodes.map(n=>n.gx))+NW+60,my=Math.max(...nodes.map(n=>n.gy))+NH+60;
+    const sc=Math.min(1,(cW-40)/mx,(cH-40)/my);
+    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));
+  }
+}
+function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}
+window.addEventListener("resize",draw);
+window.addEventListener("load",draw);
+<\/script></body></html>`;
 }
 
 // =====================================================================
@@ -2523,16 +2531,19 @@ function applyColReorder(tableEl, screenId) {
     _applyColOrderByOrig(tableEl, savedOrder);
   }
 
+  let _dragSrcTh = null;
   const ths = [...headerRow.cells];
   ths.forEach((th) => {
     th.setAttribute('draggable', 'true');
     th.addEventListener('dragstart', (e) => {
+      _dragSrcTh = th;
       e.dataTransfer.setData('text/plain', th.getAttribute('data-col-orig'));
       e.dataTransfer.effectAllowed = 'move';
       requestAnimationFrame(() => th.style.opacity = '0.4');
     });
     th.addEventListener('dragend', () => {
       th.style.opacity = '';
+      _dragSrcTh = null;
       ths.forEach(t => t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
@@ -2543,6 +2554,7 @@ function applyColReorder(tableEl, screenId) {
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
+      if (th === _dragSrcTh) return;
       const srcOrig = parseInt(e.dataTransfer.getData('text/plain'));
       const tgtOrig = parseInt(th.getAttribute('data-col-orig'));
       if (isNaN(srcOrig) || isNaN(tgtOrig) || srcOrig === tgtOrig) return;
@@ -2705,15 +2717,17 @@ function enhanceGanttTable(wrap) {
 
   // Reorder (save as key array, triggers re-render)
   const reorderKey = 'pj_column_order_gantt';
+  let _ganttDragSrcTh = null;
   fixedThs.forEach((th) => {
     th.setAttribute('draggable', 'true');
     th.addEventListener('dragstart', (e) => {
+      _ganttDragSrcTh = th;
       e.dataTransfer.setData('text/plain', th.getAttribute('data-col-key') || '');
       e.dataTransfer.effectAllowed = 'move';
       requestAnimationFrame(() => th.style.opacity = '0.4');
     });
     th.addEventListener('dragend', () => {
-      th.style.opacity = ''; fixedThs.forEach(t => t.classList.remove('drag-over'));
+      th.style.opacity = ''; _ganttDragSrcTh = null; fixedThs.forEach(t => t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
       e.preventDefault(); fixedThs.forEach(t => t.classList.remove('drag-over')); th.classList.add('drag-over');
@@ -2721,6 +2735,7 @@ function enhanceGanttTable(wrap) {
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
+      if (th === _ganttDragSrcTh) return;
       const srcKey = e.dataTransfer.getData('text/plain');
       const tgtKey = th.getAttribute('data-col-key');
       if (!srcKey || !tgtKey || srcKey === tgtKey) return;
