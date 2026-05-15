@@ -2790,14 +2790,18 @@ function enhanceGanttTable(wrap) {
 
   // Filter (fixed columns only)
   const filterKey = 'pj_filters_gantt';
-  const savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
+  let savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
+  // Reset old numeric-indexed filter state (column count changed)
+  if (Object.keys(savedF).some(k => !isNaN(parseInt(k, 10)))) savedF = {};
   const trs = [...table.querySelectorAll('tbody tr')];
   function applyGanttFilter() {
     trs.forEach(tr => {
       let visible = true;
-      Object.entries(savedF).forEach(([ci, allowed]) => {
+      Object.entries(savedF).forEach(([colKey, allowed]) => {
         if (!allowed) return;
-        const td = tr.cells[parseInt(ci)];
+        const thIdx = fixedThs.findIndex(t => (t.dataset.colKey || '') === colKey);
+        if (thIdx < 0) return;
+        const td = tr.cells[thIdx];
         const val = td ? td.textContent.trim() : '';
         if (!allowed.includes(val)) visible = false;
       });
@@ -2807,20 +2811,21 @@ function enhanceGanttTable(wrap) {
   }
   applyGanttFilter();
   fixedThs.forEach((th, colIdx) => {
+    const colKey = th.dataset.colKey || String(colIdx);
     th.querySelectorAll('.filter-btn').forEach(b => b.remove());
     const vals = [...new Set(trs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
     if (vals.length === 0) return;
     const btn = document.createElement('span');
-    btn.className = 'filter-btn' + (savedF[colIdx] ? ' active' : '');
+    btn.className = 'filter-btn' + (savedF[colKey] ? ' active' : '');
     btn.textContent = '▼'; btn.title = 'フィルター'; th.appendChild(btn);
     btn.addEventListener('click', (e) => {
       e.stopPropagation(); e.preventDefault();
       document.querySelectorAll('.col-filter-dropdown').forEach(d => d.remove());
-      const selected = savedF[colIdx] || vals;
+      const selected = savedF[colKey] || vals;
       const dd = document.createElement('div'); dd.className = 'col-filter-dropdown';
       const allWrap = document.createElement('div');
       allWrap.style.cssText = 'padding:4px 0;border-bottom:1px solid #eee;margin-bottom:6px;font-weight:600;display:flex;align-items:center;gap:6px;';
-      const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.checked = !savedF[colIdx];
+      const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.checked = !savedF[colKey];
       allWrap.appendChild(allCb); allWrap.appendChild(document.createTextNode('すべて選択')); dd.appendChild(allWrap);
       const itemCbs = [];
       vals.forEach(val => {
@@ -2830,14 +2835,14 @@ function enhanceGanttTable(wrap) {
         lbl.appendChild(cb); lbl.appendChild(document.createTextNode(val)); dd.appendChild(lbl); itemCbs.push(cb);
         cb.addEventListener('change', () => {
           const checked = itemCbs.filter(c => c.checked).map(c => c.value);
-          savedF[colIdx] = checked.length === vals.length ? null : checked;
-          allCb.checked = !savedF[colIdx]; btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+          savedF[colKey] = checked.length === vals.length ? null : checked;
+          allCb.checked = !savedF[colKey]; btn.classList.toggle('active', !!savedF[colKey]); applyGanttFilter();
         });
       });
       allCb.addEventListener('change', () => {
-        savedF[colIdx] = allCb.checked ? null : [];
+        savedF[colKey] = allCb.checked ? null : [];
         itemCbs.forEach(c => c.checked = allCb.checked);
-        btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+        btn.classList.toggle('active', !!savedF[colKey]); applyGanttFilter();
       });
       const rect = btn.getBoundingClientRect();
       dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom + 2) + 'px';
