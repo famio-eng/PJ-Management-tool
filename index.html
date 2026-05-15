@@ -488,7 +488,7 @@ const state = {
   projectName: '医療機器開発PJ-A',
   reportDate: '2026-05-18',
   currentScreen: 'dashboard',
-  nwMode: 'cp',
+  nwMode: 'all',
   nwSelectedId: null,
   nwSubDepth: 2,
   nwDeptFilter: 'all',
@@ -1659,6 +1659,9 @@ window.showNWSubPanel = function(id) {
   const win = window.open('', 'nw_sub_' + id,
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
   if (!win) { alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
+  // Inject D3 directly onto the new window before document.write so the
+  // inline script can access it synchronously without any network request.
+  win._injectedD3 = d3;
   win.document.open();
   win.document.write(html);
   win.document.close();
@@ -1698,8 +1701,8 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '<div id="ctnr"><svg id="sv"></svg></div>' +
 '<div id="tip"></div>' +
 '<script>' +
-'const d3=window.opener&&window.opener.d3?window.opener.d3:window.parent&&window.parent.d3?window.parent.d3:null;' +
-'if(!d3){document.body.innerHTML=\'<p style="padding:30px;color:#c00;font-size:14px">エラー: D3が取得できません。ポップアップを許可してください。</p>\';}' +
+'const d3=window._injectedD3||(window.opener&&window.opener._injectedD3)||null;' +
+'if(!d3){document.body.innerHTML=\'<p style="padding:30px;color:#c00;font-size:14px">エラー: D3ライブラリが取得できませんでした。</p>\';throw new Error("D3 not available");}' +
 'const ALL=' + tasksJson + ';' +
 'let fid=' + focusId + ', dep=' + initDepth + ', _z, _sv;' +
 'function bG(tasks){' +
@@ -1796,6 +1799,8 @@ function renderGantt() {
       <div class="gantt-controls">
         <span style="font-size:12px;color:#666">表示週数:</span>
         ${weekOptions.map(w => `<button class="btn btn-sm ${state.ganttWeeks===w?'btn-primary':'btn-outline'}" onclick="setGanttWeeks(${w})">${w}週</button>`).join('')}
+        <span style="width:8px"></span>
+        <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="全固定列の幅をコンテンツに合わせて最適化">列幅自動調整</button>
         <span style="flex:1"></span>
         <span style="font-size:11px;color:#888">
           <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
@@ -2304,9 +2309,53 @@ function enhanceTable(tableEl, screenId) {
   applyColReorder(tableEl, screenId);
   applyColResize(tableEl, screenId);
   applyColFilter(tableEl, screenId);
+  // Wire auto-fit button if present near the table
+  const container = tableEl.closest('.section') || tableEl.parentElement;
+  if (container) {
+    container.querySelectorAll('.auto-fit-btn').forEach(btn => {
+      btn.onclick = () => {
+        const key = 'pj_column_widths_' + screenId;
+        const thead = tableEl.querySelector('thead');
+        if (!thead) return;
+        const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
+        if (!headerRow) return;
+        autoFitCols([...headerRow.cells], tableEl, key);
+      };
+    });
+  }
 }
 
-// --- Column Resize (auto-fit on first load) ---
+// --- Column width auto-fit helper ---
+function measureColMinWidth(th, colIdx, tableEl) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const cs = window.getComputedStyle(th);
+  ctx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+  let maxW = 0;
+  // Measure header text (strip child element text like ▼)
+  const headerText = th.childNodes[0] ? (th.childNodes[0].textContent || '').trim() : th.textContent.trim();
+  maxW = Math.max(maxW, ctx.measureText(headerText).width);
+  tableEl.querySelectorAll('tbody tr').forEach(tr => {
+    const td = tr.cells[colIdx];
+    if (!td) return;
+    const txt = td.textContent.trim();
+    maxW = Math.max(maxW, ctx.measureText(txt).width);
+  });
+  return Math.ceil(maxW) + 24; // 24px padding
+}
+
+function autoFitCols(ths, tableEl, storageKey) {
+  const ws = {};
+  ths.forEach((th, i) => {
+    const w = measureColMinWidth(th, i, tableEl);
+    th.style.width = w + 'px';
+    th.style.minWidth = w + 'px';
+    ws[i] = w + 'px';
+  });
+  localStorage.setItem(storageKey, JSON.stringify(ws));
+}
+
+// --- Column Resize ---
 function applyColResize(tableEl, screenId) {
   const key = 'pj_column_widths_' + screenId;
   const saved = JSON.parse(localStorage.getItem(key) || '{}');
@@ -2338,6 +2387,14 @@ function applyColResize(tableEl, screenId) {
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
+    });
+    // Double-click on resize handle → auto-fit this column
+    handle.addEventListener('dblclick', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const w = measureColMinWidth(th, i, tableEl);
+      th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+      const ws = {}; ths.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
+      localStorage.setItem(key, JSON.stringify(ws));
     });
   });
   // Save browser auto-sized widths on first load
@@ -2554,12 +2611,28 @@ function enhanceGanttTable(wrap) {
       };
       document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     });
+    // Double-click on resize handle → auto-fit this column
+    handle.addEventListener('dblclick', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const w = measureColMinWidth(th, i, table);
+      th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+      const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
+      localStorage.setItem(resizeKey, JSON.stringify(ws));
+    });
   });
   if (!hasSavedW) {
     requestAnimationFrame(() => {
       const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
       if (Object.keys(ws).length > 0) localStorage.setItem(resizeKey, JSON.stringify(ws));
     });
+  }
+
+  // Auto-fit button handler
+  const autoFitBtn = wrap.querySelector('.gantt-auto-fit-btn');
+  if (autoFitBtn) {
+    autoFitBtn.onclick = () => {
+      autoFitCols(fixedThs, table, resizeKey);
+    };
   }
 
   // Filter (fixed columns only)
