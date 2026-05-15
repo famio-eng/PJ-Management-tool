@@ -1645,12 +1645,15 @@ window.showNWContextMenu = function(event, id) {
 };
 
 // NW subgraph — opens in a new browser window
-// Uses document.write so d3 and task data can be passed by reference (no CDN needed)
+// Stores data on the PARENT window; popup accesses it via window.opener (safe across document.write)
 window.showNWSubPanel = function(id) {
   if (!id) return;
   const depth = state.nwSubPanelDepth || 2;
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
+
+  // Store on THIS window so popup can read via window.opener (not cleared by child document.open)
+  window._nwSubData = { tasks: state.tasks, focusId: id, title: title, depth: depth };
 
   const win = window.open('', 'nw_sub_' + id,
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
@@ -1658,14 +1661,7 @@ window.showNWSubPanel = function(id) {
     alert('ポップアップがブロックされています。ブラウザの設定で許可してください。');
     return;
   }
-  // Pass d3 and task data on the window object — survives document.open/write
-  win._d3      = window.d3;
-  win._nwTasks = state.tasks;
-  win._nwFocusId = id;
-  win._nwTitle   = title;
-  win._nwDepth   = depth;
-
-  win.document.open();
+  // No document.open() call — implicit open happens in child context, preserving window.opener
   win.document.write(buildSubgraphWindowHTML());
   win.document.close();
   win.focus();
@@ -1703,9 +1699,10 @@ function buildSubgraphWindowHTML() {
 '<div id="tip"></div>\n' +
 '<script>\n' +
 '(function(){\n' +
-'var d3=window._d3,ALL=window._nwTasks,fid=window._nwFocusId,dep=window._nwDepth||2,_z,_sv;\n' +
-'document.title="サブグラフ: "+(window._nwTitle||fid);\n' +
-'document.getElementById("ft").textContent=window._nwTitle||fid;\n' +
+'var op=window.opener,d3=op&&op.d3,_data=op&&op._nwSubData||{};\n' +
+'var ALL=_data.tasks||[],fid=_data.focusId||0,dep=_data.depth||2,_z,_sv;\n' +
+'document.title="サブグラフ: "+(_data.title||fid);\n' +
+'document.getElementById("ft").textContent=_data.title||fid;\n' +
 'document.getElementById("ds").value=dep;\n' +
 'document.getElementById("dv").textContent=dep;\n' +
 'function bG(tasks){\n' +
@@ -2333,29 +2330,58 @@ function enhanceTable(tableEl, screenId) {
 }
 
 // --- Column width auto-fit helper ---
-// Remove width constraints, force layout reflow, read browser-computed natural widths
+// Measure actual text content width using a hidden absolutely-positioned div.
+// Avoids the "table fills container" problem that makes offsetWidth too large.
+let _measureDiv = null;
+function _getOrCreateMeasureDiv() {
+  if (!_measureDiv || !document.body.contains(_measureDiv)) {
+    _measureDiv = document.createElement('div');
+    _measureDiv.style.cssText = 'position:absolute;top:-9999px;left:-9999px;' +
+      'visibility:hidden;white-space:nowrap;pointer-events:none';
+    document.body.appendChild(_measureDiv);
+  }
+  return _measureDiv;
+}
+
+function measureColContentWidth(th, colIdx, tableEl) {
+  const div = _getOrCreateMeasureDiv();
+  div.style.font = window.getComputedStyle(th).font;
+
+  // Header: read only direct text nodes (skip resize handle, filter button)
+  let headerText = '';
+  th.childNodes.forEach(n => { if (n.nodeType === 3) headerText += n.textContent; });
+  headerText = headerText.trim();
+  div.textContent = headerText;
+  let maxW = div.offsetWidth + 16; // 16px cell padding
+
+  // Body cells
+  tableEl.querySelectorAll('tbody tr').forEach(tr => {
+    const td = tr.cells[colIdx];
+    if (!td) return;
+    const clone = td.cloneNode(true);
+    // Remove pure UI controls; keep content-bearing children
+    clone.querySelectorAll('.col-resizer,.resize-handle,.filter-btn,.col-filter-btn').forEach(el => el.remove());
+    div.textContent = clone.textContent.trim();
+    maxW = Math.max(maxW, div.offsetWidth + 16);
+  });
+  return maxW;
+}
+
 function autoFitCols(ths, tableEl, storageKey) {
-  ths.forEach(th => { th.style.width = ''; th.style.minWidth = ''; });
-  void tableEl.offsetWidth;
   const ws = {};
   ths.forEach((th, i) => {
-    ws[i] = th.offsetWidth + 'px';
-    th.style.width = ws[i]; th.style.minWidth = ws[i];
+    const w = measureColContentWidth(th, i, tableEl);
+    th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+    ws[i] = w + 'px';
   });
   localStorage.setItem(storageKey, JSON.stringify(ws));
 }
 
-// Single-column auto-fit: temporarily clear ALL peers, read natural width of target, restore peers
 function fitSingleCol(th, peerThs, tableEl, storageKey) {
-  const saved = peerThs.map(t => ({w: t.style.width, mw: t.style.minWidth}));
-  peerThs.forEach(t => { t.style.width = ''; t.style.minWidth = ''; });
-  void tableEl.offsetWidth;
-  const natW = th.offsetWidth;
-  peerThs.forEach((t, i) => {
-    if (t === th) { t.style.width = natW + 'px'; t.style.minWidth = natW + 'px'; }
-    else { t.style.width = saved[i].w; t.style.minWidth = saved[i].mw; }
-  });
-  void tableEl.offsetWidth;
+  const colIdx = peerThs.indexOf(th);
+  if (colIdx === -1) return;
+  const w = measureColContentWidth(th, colIdx, tableEl);
+  th.style.width = w + 'px'; th.style.minWidth = w + 'px';
   const ws = {};
   peerThs.forEach((t, i) => { ws[i] = t.offsetWidth + 'px'; });
   localStorage.setItem(storageKey, JSON.stringify(ws));
