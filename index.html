@@ -479,6 +479,8 @@ const state = {
   actions: [],
   timelineItems: [],
   collapsedRows: new Set(),
+  tlSelectedIds: new Set(),
+  tlExpandedIds: new Set(),
 };
 
 // =====================================================================
@@ -493,6 +495,7 @@ function saveStorage() {
     localStorage.setItem('pj_comments', JSON.stringify(state.comments));
     localStorage.setItem('pj_actions', JSON.stringify(state.actions));
     localStorage.setItem('pj_timeline_items', JSON.stringify(state.timelineItems));
+    localStorage.setItem('pj_tl_selected', JSON.stringify([...state.tlSelectedIds]));
   } catch(e) { console.warn('Storage save failed', e); }
 }
 
@@ -504,6 +507,8 @@ function loadStorage() {
     state.comments = JSON.parse(localStorage.getItem('pj_comments') || '{}');
     state.actions = JSON.parse(localStorage.getItem('pj_actions') || '[]');
     state.timelineItems = JSON.parse(localStorage.getItem('pj_timeline_items') || '[]');
+    const _sel = JSON.parse(localStorage.getItem('pj_tl_selected') || 'null');
+    if (_sel) state.tlSelectedIds = new Set(_sel);
   } catch(e) { console.warn('Storage load failed', e); }
 }
 
@@ -811,9 +816,191 @@ function renderDashboard() {
 // =====================================================================
 // SCREEN 2: TIMELINE
 // =====================================================================
+
+// Build map: taskId → [directChildId, ...]
+function buildChildrenMap() {
+  const childrenOf = {};
+  state.tasks.forEach(t => { childrenOf[t.id] = []; });
+  const parentStack = []; // [{id, level}]
+  state.tasks.forEach(t => {
+    while (parentStack.length && parentStack[parentStack.length - 1].level >= t.level) {
+      parentStack.pop();
+    }
+    if (parentStack.length) {
+      childrenOf[parentStack[parentStack.length - 1].id].push(t.id);
+    }
+    parentStack.push({ id: t.id, level: t.level });
+  });
+  return childrenOf;
+}
+
+// Initialize tlSelectedIds (level1+2 + milestones) and tlExpandedIds (level1 summaries expanded)
+function initTLSelection() {
+  if (state.tlSelectedIds.size > 0) return;
+  const childrenOf = buildChildrenMap();
+  state.tasks.forEach(t => {
+    if (t.active === 'いいえ') return;
+    if (t.level <= 2 || t.duration === '0 days') {
+      state.tlSelectedIds.add(t.id);
+    }
+  });
+  // Expand all level-1 summaries so level-2 tasks appear below them by default
+  state.tasks.forEach(t => {
+    if (t.level === 1 && (childrenOf[t.id] || []).some(cid => state.tlSelectedIds.has(cid))) {
+      state.tlExpandedIds.add(t.id);
+    }
+  });
+}
+
+// Build immediate-parent map: taskId → parentId (or null)
+function buildParentMap() {
+  const parentOf = {};
+  const parentStack = [];
+  state.tasks.forEach(t => {
+    while (parentStack.length && parentStack[parentStack.length - 1].level >= t.level) {
+      parentStack.pop();
+    }
+    parentOf[t.id] = parentStack.length ? parentStack[parentStack.length - 1].id : null;
+    parentStack.push({ id: t.id, level: t.level });
+  });
+  return parentOf;
+}
+
+// Return array of row objects for drawTimeline()
+function buildTLRows() {
+  const childrenOf = buildChildrenMap();
+  const parentOf = buildParentMap();
+
+  // A task is visible if: selected AND (no selected parent OR parent is expanded)
+  function isVisible(t) {
+    if (!state.tlSelectedIds.has(t.id)) return false;
+    const pid = parentOf[t.id];
+    if (pid == null) return true;
+    if (!state.tlSelectedIds.has(pid)) return true; // parent not selected → show independently
+    return state.tlExpandedIds.has(pid);            // parent selected → only if expanded
+  }
+
+  const rows = [];
+  state.tasks.forEach(t => {
+    if (t.active === 'いいえ') return;
+    if (!isVisible(t)) return;
+    const hasSelectedChildren = (childrenOf[t.id] || []).some(cid => state.tlSelectedIds.has(cid));
+    rows.push({
+      id: t.id,
+      name: t.name,
+      bstart: toDate(t.bstart), bend: toDate(t.bend),
+      astart: toDate(t.astart), aend: toDate(t.aend),
+      isMilestone: t.duration === '0 days',
+      status: t.status,
+      level: t.level,
+      resource: t.resource || '',
+      source: 'auto',
+      color: null,
+      isSummary: hasSelectedChildren,
+      isExpanded: state.tlExpandedIds.has(t.id),
+    });
+  });
+
+  // Manual items always shown
+  state.timelineItems.forEach(m => {
+    rows.push({
+      id: m.id,
+      name: m.name,
+      bstart: toDate(m.date || m.start), bend: toDate(m.end || m.date),
+      astart: null, aend: null,
+      isMilestone: m.type === 'milestone',
+      status: null, level: 3, resource: '',
+      source: 'manual', color: m.color,
+      isSummary: false, isExpanded: false,
+    });
+  });
+
+  return rows;
+}
+
+// Build task list panel HTML (all tasks with checkboxes)
+function buildTLTaskListHTML() {
+  if (!state.tasks.length) return '<p style="padding:12px;color:#888">タスクなし</p>';
+  const activeTasks = state.tasks.filter(t => t.active !== 'いいえ');
+  const allChecked = activeTasks.length > 0 && activeTasks.every(t => state.tlSelectedIds.has(t.id));
+  const someChecked = activeTasks.some(t => state.tlSelectedIds.has(t.id));
+
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="background:#f0f4fa;position:sticky;top:0;z-index:1">
+      <th style="width:28px;padding:4px 6px;text-align:center">
+        <input type="checkbox" id="tl-chk-all" ${allChecked ? 'checked' : ''} onchange="toggleAllTLTasks(this.checked)">
+      </th>
+      <th style="text-align:left;padding:4px 6px">タスク名</th>
+      <th style="width:82px;padding:4px 6px">基準開始</th>
+      <th style="width:82px;padding:4px 6px">基準終了</th>
+      <th style="width:64px;padding:4px 6px">担当</th>
+      <th style="width:64px;padding:4px 6px">ステータス</th>
+    </tr></thead><tbody>`;
+
+  activeTasks.forEach(t => {
+    const checked = state.tlSelectedIds.has(t.id);
+    const indent = (t.level - 1) * 14;
+    const bold = t.level <= 2;
+    const bg = t.level === 1 ? '#f0f4fa' : t.level === 2 ? '#f8faff' : '';
+    const name = t.name.length > 32 ? t.name.slice(0, 31) + '…' : t.name;
+    html += `<tr style="border-bottom:1px solid #f0f0f0;${bg ? 'background:' + bg : ''}">
+      <td style="text-align:center;padding:3px 6px">
+        <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
+      </td>
+      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}">${name}</td>
+      <td style="padding:3px 6px;color:#666">${t.bstart || ''}</td>
+      <td style="padding:3px 6px;color:#666">${t.bend || ''}</td>
+      <td style="padding:3px 6px;color:#666;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
+      <td style="padding:3px 6px">${t.status || ''}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+window.toggleTLTask = function(id, checked) {
+  if (checked) state.tlSelectedIds.add(id);
+  else { state.tlSelectedIds.delete(id); state.tlExpandedIds.delete(id); }
+  saveStorage();
+  // Update "all" checkbox state
+  const allCb = document.getElementById('tl-chk-all');
+  if (allCb) {
+    const active = state.tasks.filter(t => t.active !== 'いいえ');
+    allCb.checked = active.length > 0 && active.every(t => state.tlSelectedIds.has(t.id));
+  }
+  drawTimeline(state.tlMonths || 12);
+};
+
+window.toggleAllTLTasks = function(checked) {
+  state.tasks.forEach(t => {
+    if (t.active === 'いいえ') return;
+    if (checked) state.tlSelectedIds.add(t.id);
+    else { state.tlSelectedIds.delete(t.id); state.tlExpandedIds.delete(t.id); }
+  });
+  saveStorage();
+  document.querySelectorAll('#tl-task-list input[data-tid]').forEach(cb => { cb.checked = checked; });
+  drawTimeline(state.tlMonths || 12);
+};
+
+window.toggleTLPanel = function() {
+  const panel = document.getElementById('tl-task-list');
+  const arrow = document.getElementById('tl-panel-arrow');
+  if (!panel) return;
+  const hidden = panel.style.display === 'none';
+  panel.style.display = hidden ? '' : 'none';
+  if (arrow) arrow.textContent = hidden ? '▼' : '▶';
+};
+
+window.toggleTLExpand = function(id) {
+  if (state.tlExpandedIds.has(id)) state.tlExpandedIds.delete(id);
+  else state.tlExpandedIds.add(id);
+  drawTimeline(state.tlMonths || 12);
+};
+
 function renderTimeline() {
-  const months6 = 6, months12 = 12, months18 = 18;
   let showMonths = state.tlMonths || 12;
+  initTLSelection();
 
   const deptLegend = Object.entries(DEPT_COLORS).map(([dept, color]) =>
     `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;white-space:nowrap">
@@ -839,8 +1026,17 @@ function renderTimeline() {
           <span style="width:2px;height:14px;background:orange;display:inline-block"></span>TODAY</span>
       </div>
     </div>
-    <div class="section" style="padding:12px">
+    <div class="section" style="padding:12px;margin-bottom:10px">
       <div id="tl-wrap" style="overflow-x:auto"></div>
+    </div>
+    <div class="section" style="padding:0;overflow:hidden">
+      <div id="tl-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;border-bottom:1px solid #eee" onclick="toggleTLPanel()">
+        <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
+        <span id="tl-panel-arrow">▼</span>
+      </div>
+      <div id="tl-task-list" style="max-height:280px;overflow-y:auto">
+        ${buildTLTaskListHTML()}
+      </div>
     </div>`;
 
   drawTimeline(showMonths);
@@ -859,40 +1055,13 @@ function drawTimeline(showMonths) {
   const startDate = new Date(rd.getFullYear(), rd.getMonth() - 2, 1);
   const endDate   = new Date(startDate.getFullYear(), startDate.getMonth() + showMonths, 1);
 
-  // Tasks to show: level 1,2 summaries + milestones + manual items
-  const tlTasks = state.tasks.filter(t => (t.level <= 2 || t.duration === '0 days') && t.active !== 'いいえ');
-  const manualItems = state.timelineItems;
-
-  const allRows = [
-    ...tlTasks.map(t => ({
-      name: t.name,
-      bstart: toDate(t.bstart), bend: toDate(t.bend),
-      astart: toDate(t.astart), aend: toDate(t.aend),
-      isMilestone: t.duration === '0 days',
-      status: t.status,
-      level: t.level,
-      resource: t.resource || '',
-      source: 'auto',
-      color: null,
-    })),
-    ...manualItems.map(m => ({
-      name: m.name,
-      bstart: toDate(m.date || m.start), bend: toDate(m.end || m.date),
-      astart: null, aend: null,
-      isMilestone: m.type === 'milestone',
-      status: null,
-      level: 3,
-      resource: '',
-      source: 'manual',
-      color: m.color,
-    })),
-  ].filter(r => {
-    const s = r.bstart, e = r.bend;
+  const allRows = buildTLRows().filter(r => {
+    const s = r.bstart, e = r.bend || r.bstart;
     return s && (e >= startDate || s <= endDate);
   });
 
   const W = Math.max(wrap.clientWidth - 8, 600);
-  const marginL = 180, marginR = 10, marginT = 48, marginB = 20;
+  const marginL = 188, marginR = 10, marginT = 48, marginB = 20;
   const innerW = W - marginL - marginR;
   const rowH = 34;
   const H = marginT + allRows.length * rowH + marginB + 24;
@@ -933,14 +1102,26 @@ function drawTimeline(showMonths) {
     rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', innerW).attr('height', rowH)
       .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
 
-    // Task name
+    // Task name label area
     const indent = row.level === 1 ? 0 : row.level === 2 ? 10 : 18;
-    const label = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
-    g.append('text').attr('x', -marginL + indent).attr('y', y + rowH / 2 + 4)
-      .attr('font-size', row.level === 1 ? '12px' : row.level === 2 ? '11px' : '11px')
+    const maxChars = row.isSummary ? 20 : 22;
+    const label = row.name.length > maxChars ? row.name.slice(0, maxChars - 1) + '…' : row.name;
+    const expandIcon = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
+    const prefix = row.source === 'manual' ? '✏ ' : expandIcon;
+
+    const textEl = g.append('text')
+      .attr('x', -marginL + indent)
+      .attr('y', y + rowH / 2 + 4)
+      .attr('font-size', row.level === 1 ? '12px' : '11px')
       .attr('font-weight', row.level <= 2 ? '600' : '400')
       .attr('class', 'tl-task-text')
-      .text((row.source === 'manual' ? '✏ ' : '') + label);
+      .text(prefix + label);
+
+    // Clickable label for summary tasks (expand/collapse)
+    if (row.isSummary && row.id != null) {
+      textEl.style('cursor', 'pointer')
+        .on('click', () => toggleTLExpand(row.id));
+    }
 
     if (row.isMilestone) {
       const mx = xScale(row.bstart);
@@ -962,10 +1143,15 @@ function drawTimeline(showMonths) {
         const x2 = Math.min(innerW, xScale(row.bend));
         if (x2 > x1) {
           const color = row.color || getDeptColor(row.resource);
-          rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
+          const barEl = rowG.append('rect')
+            .attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
             .attr('fill', color).attr('opacity', row.level <= 2 ? .85 : .7).attr('rx', 2)
             .on('mouseover', (e) => showTooltip(e, `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}`))
             .on('mouseout', hideTooltip);
+          // Summary bars also clickable for expand/collapse
+          if (row.isSummary && row.id != null) {
+            barEl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
+          }
         }
       }
       // Actual progress bar (astart → aend or TODAY, gray)
@@ -986,15 +1172,16 @@ function drawTimeline(showMonths) {
   });
 
   // Manual items delete buttons (right side)
-  if (manualItems.length > 0) {
-    const startIdx = tlTasks.length;
-    manualItems.forEach((item, i) => {
-      const y = (startIdx + i) * rowH + rowH / 2 - 8;
-      svg.append('text').attr('x', W - marginR - 16).attr('y', marginT + y + 10)
-        .attr('font-size', '12px').attr('fill', '#e53935').attr('cursor', 'pointer')
-        .text('✕').on('click', () => { state.timelineItems.splice(i, 1); saveStorage(); renderTimeline(); });
-    });
-  }
+  const manualRows = allRows.filter(r => r.source === 'manual');
+  manualRows.forEach((row, i) => {
+    const rowIdx = allRows.indexOf(row);
+    const y = rowIdx * rowH + rowH / 2 - 8;
+    const origIdx = state.timelineItems.findIndex(m => m.id === row.id);
+    if (origIdx < 0) return;
+    svg.append('text').attr('x', W - marginR - 16).attr('y', marginT + y + 10)
+      .attr('font-size', '12px').attr('fill', '#e53935').attr('cursor', 'pointer')
+      .text('✕').on('click', () => { state.timelineItems.splice(origIdx, 1); saveStorage(); renderTimeline(); });
+  });
 }
 
 // Timeline item modal
