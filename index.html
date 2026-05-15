@@ -61,12 +61,16 @@ tr:hover td{background:#fafbff}
 .btn-outline{background:#fff;border:1px solid #ccc;color:#333}
 .btn-sm{padding:3px 8px;font-size:11px}
 /* NW Graph */
-#nw-wrap{display:flex;gap:0;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
-#nw-svg-container{flex:1;min-height:560px;position:relative;overflow:hidden;cursor:grab;background:#f8f9fc}
+#nw-wrap{display:flex;flex-direction:column;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
+#nw-svg-container{flex:1;min-height:520px;position:relative;overflow:hidden;cursor:grab;background:#f8f9fc}
 #nw-svg-container:active{cursor:grabbing}
 #nw-svg{width:100%;height:100%}
-#nw-panel{width:270px;border-left:1px solid #e0e0e0;padding:14px;overflow-y:auto;font-size:12px;background:#fff;flex-shrink:0}
-#nw-panel h3{font-size:13px;font-weight:600;margin-bottom:10px;color:#1a3a5c}
+#nw-panel{border-top:1px solid #e0e0e0;padding:8px 14px;overflow-y:auto;font-size:12px;background:#fff;max-height:190px}
+#nw-panel h3{font-size:12px;font-weight:600;margin-bottom:6px;color:#1a3a5c}
+.nw-detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 10px}
+.nw-detail-cell{font-size:11px}
+.nw-detail-cell .nw-detail-label{display:block;color:#888;margin-bottom:1px}
+.nw-detail-cell .nw-detail-val{font-weight:500}
 .nw-detail-row{display:flex;margin-bottom:6px;gap:6px}
 .nw-detail-label{width:80px;font-size:11px;color:#888;flex-shrink:0}
 .nw-detail-val{flex:1;font-weight:500}
@@ -181,6 +185,7 @@ body.dark .file-area{background:#1e2a45;border-color:#3a3a5c;color:#888}
 body.dark #nw-panel{background:#16213e;border-color:#3a3a5c}
 body.dark #nw-svg-container{background:#1a1a2e}
 body.dark .nw-detail-label{color:#7a8a9a}
+body.dark .nw-detail-cell .nw-detail-label{color:#7a8a9a}
 body.dark .gantt-table th{background:#1e2a45;border-color:#3a3a5c}
 body.dark .gantt-table td{border-color:#2a2a4a}
 body.dark .gantt-controls{border-color:#3a3a5c}
@@ -1332,7 +1337,7 @@ function computeLayout(nodes, edges) {
     if (!byDepth[d]) byDepth[d] = [];
     byDepth[d].push(n);
   });
-  const NW = 190, NH = 72, CGAP = 60, RGAP = 14;
+  const NW = 190, NH = 96, CGAP = 60, RGAP = 14;
   nodes.forEach(n => {
     const d = depth[n.id] || 0;
     const col = byDepth[d];
@@ -1392,7 +1397,7 @@ function renderNW() {
   const {nodes, edges} = buildGraph(modeTasks);
   computeLayout(nodes, edges);
 
-  const NW = 190, NH = 72;
+  const NW = 190, NH = 96;
   const maxX = nodes.length ? Math.max(...nodes.map(n => n.gx)) + NW + 40 : 400;
   const maxY = nodes.length ? Math.max(...nodes.map(n => n.gy)) + NH + 40 : 300;
   const CANVAS_W = Math.max(maxX + 60, 600);
@@ -1413,11 +1418,13 @@ function renderNW() {
       <span class="text-muted">${nodes.length}ノード表示中</span>
     </div>
     <div id="nw-wrap">
-      <div id="nw-svg-container" style="height:560px">
+      <div id="nw-svg-container" style="height:520px">
         <svg id="nw-svg"></svg>
       </div>
       <div id="nw-panel">
-        <h3>タスク詳細</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <h3 style="margin:0">タスク詳細</h3>
+        </div>
         <div id="nw-detail"><p class="text-muted" style="font-size:11px">ノードをクリックして詳細を表示</p></div>
       </div>
     </div>`;
@@ -1462,21 +1469,25 @@ function renderNW() {
 
   // Nodes
   nodes.forEach(n => {
-    const statusBgColor = {
+    const isClose = n.status === 'Close';
+    const statusBgColor = isClose ? '#606060' : ({
       'On-going': '#E2EFDA', 'Delay': '#FFE0E0',
-      'Close': '#DDEEFF', 'nActive': '#F2F2F2', 'Disable': '#F2F2F2'
-    }[n.status] || '#fff';
-    const statusBorderColor = {
+      'nActive': '#F2F2F2', 'Disable': '#F2F2F2'
+    }[n.status] || '#fff');
+    const statusBorderColor = isClose ? '#404040' : ({
       'On-going': '#00B050', 'Delay': '#FF0000',
-      'Close': '#0070C0', 'nActive': '#808080', 'Disable': '#BFBFBF'
-    }[n.status] || '#ccc';
-    const isCP = n.critical === 'はい';
+      'nActive': '#808080', 'Disable': '#BFBFBF'
+    }[n.status] || '#ccc');
+    const isCP = !isClose && n.critical === 'はい';
     const isSelected = n.id === state.nwSelectedId;
+    const textColor = isClose ? '#303030' : '#222';
 
     const ng = g.append('g').attr('class', 'nw-node')
       .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
       .style('cursor', 'pointer')
-      .on('click', () => selectNWNode(n.id));
+      .on('click', () => selectNWNode(n.id))
+      .on('dblclick', (e) => { e.stopPropagation(); showNWSubPanel(n.id); })
+      .on('contextmenu', (e) => { e.preventDefault(); showNWContextMenu(e, n.id); });
 
     ng.append('rect')
       .attr('width', NW).attr('height', NH)
@@ -1485,7 +1496,7 @@ function renderNW() {
       .attr('stroke', isSelected ? '#333' : isCP ? '#e53935' : statusBorderColor)
       .attr('stroke-width', isSelected ? 3 : isCP ? 2.5 : 1.5);
 
-    // CP badge
+    // CP badge (only for non-Close tasks)
     if (isCP) {
       ng.append('rect').attr('x', NW - 28).attr('y', 0).attr('width', 22).attr('height', 14)
         .attr('rx', 2).attr('fill', '#e53935');
@@ -1494,27 +1505,37 @@ function renderNW() {
     }
 
     // WBS number
-    ng.append('text').attr('x', 8).attr('y', 14)
-      .attr('font-size', '9px').attr('fill', '#888').text(n.wbs);
+    ng.append('text').attr('x', 8).attr('y', 13)
+      .attr('font-size', '9px').attr('fill', isClose ? '#404040' : '#888').text(n.wbs);
 
     // Task name (wrap at ~22 chars)
     const name = n.name;
     const line1 = name.slice(0, 22);
     const line2 = name.length > 22 ? name.slice(22, 42) + (name.length > 42 ? '…' : '') : '';
-    ng.append('text').attr('x', NW / 2).attr('y', line2 ? 30 : 36)
+    ng.append('text').attr('x', NW / 2).attr('y', line2 ? 28 : 34)
       .attr('text-anchor', 'middle').attr('font-size', '11px').attr('font-weight', '600')
-      .attr('fill', '#222').text(line1);
+      .attr('fill', textColor).text(line1);
     if (line2) {
-      ng.append('text').attr('x', NW / 2).attr('y', 44)
-        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', '#222').text(line2);
+      ng.append('text').attr('x', NW / 2).attr('y', 42)
+        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', textColor).text(line2);
     }
 
+    // Separator line
+    ng.append('line').attr('x1', 6).attr('x2', NW - 6).attr('y1', 58).attr('y2', 58)
+      .attr('stroke', isClose ? '#666666' : '#ddd').attr('stroke-width', 1);
+
     // Status + pct
-    ng.append('text').attr('x', NW / 2).attr('y', NH - 6)
-      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#555')
+    ng.append('text').attr('x', NW / 2).attr('y', 71)
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#303030' : '#555')
       .text(`${n.status} | ${n.pct}%`);
 
-    ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>WBS: ${n.wbs}<br>担当: ${n.resource||'—'}<br>達成率: ${n.pct}%`))
+    // Resource (担当)
+    const resLabel = (n.resource || '—').length > 22 ? (n.resource || '—').slice(0, 21) + '…' : (n.resource || '—');
+    ng.append('text').attr('x', NW / 2).attr('y', 87)
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#404040' : '#4472C4')
+      .text(`担当: ${resLabel}`);
+
+    ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>WBS: ${n.wbs}<br>担当: ${n.resource||'—'}<br>ステータス: ${n.status}<br>達成率: ${n.pct}%${isCP ? '<br>🔴 クリティカルパス' : ''}`))
       .on('mouseout', hideTooltip);
   });
 
@@ -1548,21 +1569,219 @@ function selectNWNode(id) {
   const commentKey = `${id}_${weekKey}`;
   const existingComment = state.comments[commentKey];
   document.getElementById('nw-detail').innerHTML = `
-    <div class="nw-detail-row"><div class="nw-detail-label">タスク名</div><div class="nw-detail-val" style="font-weight:700">${task.name}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">WBS番号</div><div class="nw-detail-val">${task.wbs}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">担当部門</div><div class="nw-detail-val">${task.resource||'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">基準開始日</div><div class="nw-detail-val">${task.bstart||'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">基準終了日</div><div class="nw-detail-val">${task.bend||'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">達成率</div><div class="nw-detail-val">${pctBar(task.pct)}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">ステータス</div><div class="nw-detail-val">${statusBadge(task.status)}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">CP</div><div class="nw-detail-val">${task.critical==='はい'?'<span class="cp-badge">CP</span>':'—'}</div></div>
-    <div class="nw-detail-row"><div class="nw-detail-label">Note</div><div class="nw-detail-val">${task.note||'—'}</div></div>
-    <hr style="margin:10px 0;border-color:#eee">
-    <div style="margin-top:8px">
+    <div class="nw-detail-grid">
+      <div class="nw-detail-cell" style="grid-column:span 2">
+        <span class="nw-detail-label">タスク名</span>
+        <span class="nw-detail-val" style="font-weight:700">${task.name}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">WBS番号</span>
+        <span class="nw-detail-val">${task.wbs}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">ステータス</span>
+        <span class="nw-detail-val">${statusBadge(task.status)}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">担当部門</span>
+        <span class="nw-detail-val">${task.resource||'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">達成率</span>
+        <span class="nw-detail-val">${pctBar(task.pct)}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">基準開始日</span>
+        <span class="nw-detail-val">${task.bstart||'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">基準終了日</span>
+        <span class="nw-detail-val">${task.bend||'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">CP</span>
+        <span class="nw-detail-val">${task.critical==='はい'?'<span class="cp-badge">CP</span>':'—'}</span>
+      </div>
+      <div class="nw-detail-cell">
+        <span class="nw-detail-label">Note</span>
+        <span class="nw-detail-val">${task.note||'—'}</span>
+      </div>
+    </div>
+    <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-secondary btn-sm" onclick="state.nwMode='sub';state.nwSubDepth=2;renderNW()">周辺NWを表示</button>
+      <button class="btn btn-sm btn-outline" onclick="showNWSubPanel(${id})">サブグラフを表示</button>
+      <span style="color:#AAAAAA;font-style:italic;font-size:10px;margin-left:8px">【Phase 2 予定】TF / FF / ES / EF / LS / LF</span>
     </div>`;
   // Highlight selected node
   renderNW();
+}
+
+// NW context menu
+window.showNWContextMenu = function(event, id) {
+  d3.select('#nw-ctx-menu').remove();
+  const menu = d3.select('body').append('div')
+    .attr('id', 'nw-ctx-menu')
+    .style('position', 'fixed')
+    .style('left', event.clientX + 'px')
+    .style('top', event.clientY + 'px')
+    .style('background', '#fff')
+    .style('border', '1px solid #ddd')
+    .style('border-radius', '4px')
+    .style('box-shadow', '0 2px 8px rgba(0,0,0,.25)')
+    .style('z-index', '9999')
+    .style('padding', '4px 0')
+    .style('min-width', '160px');
+  menu.append('div')
+    .style('padding', '7px 16px').style('cursor', 'pointer').style('font-size', '12px')
+    .text('サブグラフを表示')
+    .on('mouseover', function() { d3.select(this).style('background', '#f0f4fa'); })
+    .on('mouseout',  function() { d3.select(this).style('background', ''); })
+    .on('click', () => { d3.select('#nw-ctx-menu').remove(); showNWSubPanel(id); });
+  // close on next click anywhere
+  setTimeout(() => {
+    const close = () => { d3.select('#nw-ctx-menu').remove(); document.removeEventListener('click', close); };
+    document.addEventListener('click', close);
+  }, 10);
+};
+
+// NW subgraph — opens in a new browser window
+window.showNWSubPanel = function(id) {
+  if (!id) return;
+  const depth = state.nwSubPanelDepth || 2;
+  const task  = state.tasks.find(t => t.id === id);
+  const title = task ? task.name : String(id);
+
+  // Serialize task data; escape closing-script tags to prevent HTML injection
+  const tasksJson = JSON.stringify(state.tasks).replace(/<\/script/gi, '<\\/script');
+
+  const html = buildSubgraphWindowHTML(id, title, depth, tasksJson);
+
+  const win = window.open('', 'nw_sub_' + id,
+    'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
+  if (!win) { alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+};
+
+window.closeNWSubPanel = function() { /* no-op: new-window approach */ };
+
+function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
+  return '<!DOCTYPE html>\n' +
+'<html lang="ja"><head><meta charset="UTF-8">' +
+'<title>サブグラフ: ' + focusTitle + '</title>' +
+'<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\\/script>' +
+'<style>' +
+'*{box-sizing:border-box;margin:0;padding:0}' +
+'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}' +
+'#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}' +
+'#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}' +
+'#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}' +
+'#ctnr:active{cursor:grabbing}' +
+'svg{width:100%;height:100%}' +
+'.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}' +
+'.btn:hover{background:#e8eef8}' +
+'label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}' +
+'#dv{font-size:12px;font-weight:700;min-width:14px}' +
+'#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}' +
+'</style></head><body>' +
+'<div id="hdr">' +
+'  <h2>サブグラフ: <span id="ft">' + focusTitle + '</span></h2>' +
+'  <label>深さ:' +
+'    <input type="range" id="ds" min="1" max="5" value="' + initDepth + '" style="width:80px"' +
+'      oninput="dep=+this.value;document.getElementById(\'dv\').textContent=this.value;draw()">' +
+'    <span id="dv">' + initDepth + '</span>' +
+'  </label>' +
+'  <button class="btn" onclick="resetZ()">ズームリセット</button>' +
+'  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>' +
+'</div>' +
+'<div id="ctnr"><svg id="sv"></svg></div>' +
+'<div id="tip"></div>' +
+'<script>' +
+'const ALL=' + tasksJson + ';' +
+'let fid=' + focusId + ', dep=' + initDepth + ', _z, _sv;' +
+'function bG(tasks){' +
+'  const ns=tasks.map(t=>({...t})), ids=new Set(ns.map(n=>n.id)), es=[];' +
+'  ns.forEach(n=>{if(!n.pred)return;n.pred.split(",").map(s=>parseInt(s.trim())).filter(p=>ids.has(p)).forEach(p=>es.push({source:p,target:n.id}));});' +
+'  return{nodes:ns,edges:es};' +
+'}' +
+'function cL(nodes,edges){' +
+'  if(!nodes.length)return;' +
+'  const ids=new Set(nodes.map(n=>n.id)),succ={},ind={};' +
+'  nodes.forEach(n=>{succ[n.id]=[];ind[n.id]=0;});' +
+'  edges.forEach(e=>{if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});' +
+'  const dep2={},q=nodes.filter(n=>ind[n.id]===0).map(n=>n.id);' +
+'  q.forEach(id=>{dep2[id]=0;});' +
+'  const vis=new Set(q);' +
+'  while(q.length){const id=q.shift();succ[id].forEach(sid=>{dep2[sid]=Math.max(dep2[sid]||0,(dep2[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}' +
+'  const bd={};' +
+'  nodes.forEach(n=>{const d=dep2[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});' +
+'  const NW=190,NH=96,CG=60,RG=14;' +
+'  const ch={};Object.entries(bd).forEach(([d,c])=>{ch[d]=c.length*(NH+RG)-RG;});' +
+'  const mh=Math.max(...Object.values(ch));' +
+'  nodes.forEach(n=>{const d=dep2[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});' +
+'}' +
+'function draw(){' +
+'  const reg=ALL.filter(t=>!t.isSummary&&t.active!=="いいえ");' +
+'  const sel=new Set([fid]);const ae=[];' +
+'  reg.forEach(t=>{if(!t.pred)return;t.pred.split(",").map(s=>parseInt(s.trim())).forEach(p=>ae.push({source:p,target:t.id}));});' +
+'  for(let i=0;i<dep;i++){const add=new Set();ae.forEach(e=>{if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(id=>sel.add(id));}' +
+'  const sub=reg.filter(t=>sel.has(t.id));' +
+'  const{nodes,edges}=bG(sub);cL(nodes,edges);' +
+'  const NW=190,NH=96;' +
+'  const ct=document.getElementById("ctnr");' +
+'  const cW=ct.clientWidth,cH=ct.clientHeight;' +
+'  const svg=d3.select("#sv").attr("width",cW).attr("height",cH);' +
+'  svg.selectAll("*").remove();' +
+'  const defs=svg.append("defs");' +
+'  ["normal","cp"].forEach(type=>{' +
+'    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")' +
+'      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");' +
+'  });' +
+'  const g=svg.append("g");' +
+'  const nm={};nodes.forEach(n=>{nm[n.id]=n;});' +
+'  edges.forEach(e=>{' +
+'    const s=nm[e.source],t=nm[e.target];if(!s||!t)return;' +
+'    const cp=s.critical==="はい"&&t.critical==="はい";' +
+'    const sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;' +
+'    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)' +
+'      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)' +
+'      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);' +
+'  });' +
+'  nodes.forEach(n=>{' +
+'    const ic=n.status==="Close";' +
+'    const bg=ic?"#606060":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");' +
+'    const bd=ic?"#404040":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");' +
+'    const icp=!ic&&n.critical==="はい",ifo=n.id===fid;' +
+'    const tc=ic?"#d0d0d0":"#222";' +
+'    const ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")' +
+'      .on("click",function(){fid=n.id;var t=ALL.find(x=>x.id===n.id);document.getElementById("ft").textContent=t?t.name:n.id;draw();})' +
+'      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})' +
+'      .on("mouseout",function(){document.getElementById("tip").style.display="none";});' +
+'    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg)' +
+'      .attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);' +
+'    if(icp){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}' +
+'    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#404040":"#888").text(n.wbs);' +
+'    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";' +
+'    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);' +
+'    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);' +
+'    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#666":"#ddd").attr("stroke-width",1);' +
+'    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#303030":"#555").text(n.status+" | "+n.pct+"%");' +
+'    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");' +
+'    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#404040":"#4472C4").text("担当: "+res);' +
+'  });' +
+'  const z=d3.zoom().scaleExtent([0.1,4]).on("zoom",ev=>g.attr("transform",ev.transform));' +
+'  svg.call(z);_z=z;_sv=svg;' +
+'  if(nodes.length){' +
+'    const mx=Math.max(...nodes.map(n=>n.gx))+NW+60,my=Math.max(...nodes.map(n=>n.gy))+NH+60;' +
+'    const sc=Math.min(1,(cW-40)/mx,(cH-40)/my);' +
+'    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));' +
+'  }' +
+'}' +
+'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}' +
+'window.addEventListener("resize",draw);draw();' +
+'<\/script></body></html>';
 }
 
 // =====================================================================
