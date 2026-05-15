@@ -72,8 +72,14 @@ tr:hover td{background:#fafbff}
 .nw-detail-val{flex:1;font-weight:500}
 .nw-controls{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
 /* Timeline */
-#tl-wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:16px;overflow-x:auto}
-.tl-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+.tl-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
+#tl-outer{display:flex;overflow:hidden}
+#tl-labels{flex:0 0 188px;overflow:hidden;position:relative;z-index:5}
+#tl-chart{flex:1;overflow-x:auto;min-width:0}
+.tl-label-bg{fill:#fff}
+body.dark .tl-label-bg{fill:#16213e}
+.tl-label-sep{stroke:#ddd;stroke-width:1}
+body.dark .tl-label-sep{stroke:#2a3a5c}
 /* Gantt */
 #gantt-wrap{overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .gantt-table{border-collapse:collapse;font-size:11px;min-width:100%}
@@ -204,6 +210,37 @@ body.dark .filter-btn.active{color:#90b8e0}
 /* Drag over for col reorder */
 th.drag-over{background:#d0e4f7!important;outline:2px dashed #4472C4;outline-offset:-2px}
 body.dark th.drag-over{background:#243555!important;outline-color:#90b8e0}
+/* Gantt dark mode - class-based overrides */
+.gantt-summary-row td { background: #f5f7fa; }
+body.dark .gantt-summary-row td { background: #1a2535 !important; }
+body.dark .gantt-table .today-bg { background: #2c2010 !important; }
+body.dark .gantt-table td.gt-cell { color: #d0d8e8; }
+/* Gantt: default cell and wrap background in dark mode */
+body.dark #gantt-wrap { background: #16213e; }
+body.dark .gantt-table td { background: #16213e; }
+/* Section headings in dark mode */
+body.dark .section h2 { color: #90b8e0; border-left-color: #4472C4; }
+/* Timeline SVG container - transparent so section dark bg shows through */
+body.dark #tl-labels { background: #16213e; }
+body.dark #tl-chart  { background: transparent; }
+/* Timeline SVG CSS classes for dark mode */
+.tl-gridline { stroke: #e0e0e0; stroke-width: 1; }
+body.dark .tl-gridline { stroke: #3a3a5c; }
+.tl-month-text { fill: #666; }
+body.dark .tl-month-text { fill: #7a8a9a; }
+.tl-row-even { fill: #fafbff; opacity: .5; }
+body.dark .tl-row-even { fill: #1e2a45; opacity: .5; }
+.tl-row-odd { fill: #fff; opacity: .5; }
+body.dark .tl-row-odd { fill: #16213e; opacity: .5; }
+.tl-task-text { fill: #333; }
+body.dark .tl-task-text { fill: #d0d8e8; }
+/* Task list panel row backgrounds (dark mode) */
+#tl-task-list tr.tl-list-l1 { background: #f0f4fa; }
+#tl-task-list tr.tl-list-l2 { background: #f8faff; }
+body.dark #tl-task-list tr.tl-list-l1 { background: #1a2a45; }
+body.dark #tl-task-list tr.tl-list-l2 { background: #16223a; }
+body.dark #tl-task-list thead tr { background: #1e2d50 !important; }
+body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-color: #243050; }
 </style>
 </head>
 <body>
@@ -425,6 +462,19 @@ const SAMPLE_TASKS = [
 // =====================================================================
 const DEPTS = ['Pj-L','RA','工場','EL','SW','VV','BRT','PRM','PDA','Service','Market','IP'];
 
+const DEPT_COLORS = {
+  'Pj-L':'#4472C4','RA':'#ED7D31','工場':'#A9D18E','EL':'#FF0000',
+  'SW':'#9DC3E6','VV':'#7030A0','BRT':'#FFD966','PRM':'#F4B183',
+  'PDA':'#00B0F0','Service':'#92D050','Market':'#FF66CC','IP':'#C9C9C9'
+};
+
+function getDeptColor(resource) {
+  if (!resource) return '#4472C4';
+  const depts = resource.split(',').map(s => s.trim()).filter(s => s);
+  if (depts.length > 1) return '#808080';
+  return DEPT_COLORS[depts[0]] || '#4472C4';
+}
+
 // =====================================================================
 // APP STATE
 // =====================================================================
@@ -443,6 +493,8 @@ const state = {
   actions: [],
   timelineItems: [],
   collapsedRows: new Set(),
+  tlSelectedIds: new Set(),
+  tlExpandedIds: new Set(),
 };
 
 // =====================================================================
@@ -457,6 +509,7 @@ function saveStorage() {
     localStorage.setItem('pj_comments', JSON.stringify(state.comments));
     localStorage.setItem('pj_actions', JSON.stringify(state.actions));
     localStorage.setItem('pj_timeline_items', JSON.stringify(state.timelineItems));
+    localStorage.setItem('pj_tl_selected', JSON.stringify([...state.tlSelectedIds]));
   } catch(e) { console.warn('Storage save failed', e); }
 }
 
@@ -468,6 +521,8 @@ function loadStorage() {
     state.comments = JSON.parse(localStorage.getItem('pj_comments') || '{}');
     state.actions = JSON.parse(localStorage.getItem('pj_actions') || '[]');
     state.timelineItems = JSON.parse(localStorage.getItem('pj_timeline_items') || '[]');
+    const _sel = JSON.parse(localStorage.getItem('pj_tl_selected') || 'null');
+    if (_sel) state.tlSelectedIds = new Set(_sel);
   } catch(e) { console.warn('Storage load failed', e); }
 }
 
@@ -775,105 +830,357 @@ function renderDashboard() {
 // =====================================================================
 // SCREEN 2: TIMELINE
 // =====================================================================
+
+// Build map: taskId → [directChildId, ...]
+function buildChildrenMap() {
+  const childrenOf = {};
+  state.tasks.forEach(t => { childrenOf[t.id] = []; });
+  const parentStack = []; // [{id, level}]
+  state.tasks.forEach(t => {
+    while (parentStack.length && parentStack[parentStack.length - 1].level >= t.level) {
+      parentStack.pop();
+    }
+    if (parentStack.length) {
+      childrenOf[parentStack[parentStack.length - 1].id].push(t.id);
+    }
+    parentStack.push({ id: t.id, level: t.level });
+  });
+  return childrenOf;
+}
+
+// Initialize tlSelectedIds (level1+2 + milestones) and tlExpandedIds (level1 summaries expanded)
+function initTLSelection() {
+  if (state.tlSelectedIds.size > 0) return;
+  const childrenOf = buildChildrenMap();
+  state.tasks.forEach(t => {
+    if (t.active === 'いいえ') return;
+    if (t.level <= 2 || t.duration === '0 days') {
+      state.tlSelectedIds.add(t.id);
+    }
+  });
+  // Expand all level-1 summaries so level-2 tasks appear below them by default
+  state.tasks.forEach(t => {
+    if (t.level === 1 && (childrenOf[t.id] || []).some(cid => state.tlSelectedIds.has(cid))) {
+      state.tlExpandedIds.add(t.id);
+    }
+  });
+}
+
+// Build immediate-parent map: taskId → parentId (or null)
+function buildParentMap() {
+  const parentOf = {};
+  const parentStack = [];
+  state.tasks.forEach(t => {
+    while (parentStack.length && parentStack[parentStack.length - 1].level >= t.level) {
+      parentStack.pop();
+    }
+    parentOf[t.id] = parentStack.length ? parentStack[parentStack.length - 1].id : null;
+    parentStack.push({ id: t.id, level: t.level });
+  });
+  return parentOf;
+}
+
+// Return array of row objects for drawTimeline()
+function buildTLRows() {
+  const childrenOf = buildChildrenMap();
+  const parentOf = buildParentMap();
+
+  // A task is visible if: selected AND (no selected parent OR parent is expanded)
+  function isVisible(t) {
+    if (!state.tlSelectedIds.has(t.id)) return false;
+    const pid = parentOf[t.id];
+    if (pid == null) return true;
+    if (!state.tlSelectedIds.has(pid)) return true; // parent not selected → show independently
+    return state.tlExpandedIds.has(pid);            // parent selected → only if expanded
+  }
+
+  const rows = [];
+  state.tasks.forEach(t => {
+    if (t.active === 'いいえ') return;
+    if (!isVisible(t)) return;
+    const hasSelectedChildren = (childrenOf[t.id] || []).some(cid => state.tlSelectedIds.has(cid));
+    rows.push({
+      id: t.id,
+      name: t.name,
+      bstart: toDate(t.bstart), bend: toDate(t.bend),
+      astart: toDate(t.astart), aend: toDate(t.aend),
+      isMilestone: t.duration === '0 days',
+      status: t.status,
+      level: t.level,
+      resource: t.resource || '',
+      source: 'auto',
+      color: null,
+      critical: t.critical === 'はい',
+      isSummary: hasSelectedChildren,
+      isExpanded: state.tlExpandedIds.has(t.id),
+    });
+  });
+
+  // Manual items always shown
+  state.timelineItems.forEach(m => {
+    rows.push({
+      id: m.id,
+      name: m.name,
+      bstart: toDate(m.date || m.start), bend: toDate(m.end || m.date),
+      astart: null, aend: null,
+      isMilestone: m.type === 'milestone',
+      status: null, level: 3, resource: '',
+      source: 'manual', color: m.color,
+      isSummary: false, isExpanded: false,
+    });
+  });
+
+  return rows;
+}
+
+// Build task list panel HTML (all tasks with checkboxes)
+function buildTLTaskListHTML() {
+  if (!state.tasks.length) return '<p style="padding:12px;color:#888">タスクなし</p>';
+  const activeTasks = state.tasks.filter(t => t.active !== 'いいえ');
+  const allChecked = activeTasks.length > 0 && activeTasks.every(t => state.tlSelectedIds.has(t.id));
+  const someChecked = activeTasks.some(t => state.tlSelectedIds.has(t.id));
+
+  let html = `<table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead><tr style="background:#f0f4fa;position:sticky;top:0;z-index:1">
+      <th style="width:28px;padding:4px 6px;text-align:center">
+        <input type="checkbox" id="tl-chk-all" ${allChecked ? 'checked' : ''} onchange="toggleAllTLTasks(this.checked)">
+      </th>
+      <th style="text-align:left;padding:4px 6px">タスク名</th>
+      <th style="width:82px;padding:4px 6px">基準開始</th>
+      <th style="width:82px;padding:4px 6px">基準終了</th>
+      <th style="width:64px;padding:4px 6px">担当</th>
+      <th style="width:64px;padding:4px 6px">ステータス</th>
+    </tr></thead><tbody>`;
+
+  activeTasks.forEach(t => {
+    const checked = state.tlSelectedIds.has(t.id);
+    const indent = (t.level - 1) * 14;
+    const bold = t.level <= 2;
+    const rowCls = t.level === 1 ? 'tl-list-l1' : t.level === 2 ? 'tl-list-l2' : '';
+    const isCritical = t.critical === 'はい';
+    const name = t.name.length > 32 ? t.name.slice(0, 31) + '…' : t.name;
+    html += `<tr class="${rowCls}" style="border-bottom:1px solid #f0f0f0">
+      <td style="text-align:center;padding:3px 6px">
+        <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
+      </td>
+      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${isCritical ? '🔴 ' : ''}${name}</td>
+      <td style="padding:3px 6px">${t.bstart || ''}</td>
+      <td style="padding:3px 6px">${t.bend || ''}</td>
+      <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
+      <td style="padding:3px 6px">${t.status || ''}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+window.toggleTLTask = function(id, checked) {
+  if (checked) state.tlSelectedIds.add(id);
+  else { state.tlSelectedIds.delete(id); state.tlExpandedIds.delete(id); }
+  saveStorage();
+  // Update "all" checkbox state
+  const allCb = document.getElementById('tl-chk-all');
+  if (allCb) {
+    const active = state.tasks.filter(t => t.active !== 'いいえ');
+    allCb.checked = active.length > 0 && active.every(t => state.tlSelectedIds.has(t.id));
+  }
+  drawTimeline();
+};
+
+window.toggleAllTLTasks = function(checked) {
+  state.tasks.forEach(t => {
+    if (t.active === 'いいえ') return;
+    if (checked) state.tlSelectedIds.add(t.id);
+    else { state.tlSelectedIds.delete(t.id); state.tlExpandedIds.delete(t.id); }
+  });
+  saveStorage();
+  document.querySelectorAll('#tl-task-list input[data-tid]').forEach(cb => { cb.checked = checked; });
+  drawTimeline();
+};
+
+window.toggleTLPanel = function() {
+  const panel = document.getElementById('tl-task-list');
+  const arrow = document.getElementById('tl-panel-arrow');
+  if (!panel) return;
+  const hidden = panel.style.display === 'none';
+  panel.style.display = hidden ? '' : 'none';
+  if (arrow) arrow.textContent = hidden ? '▼' : '▶';
+};
+
+window.toggleTLExpand = function(id) {
+  if (state.tlExpandedIds.has(id)) state.tlExpandedIds.delete(id);
+  else state.tlExpandedIds.add(id);
+  drawTimeline();
+};
+
 function renderTimeline() {
-  const months6 = 6, months12 = 12, months18 = 18;
-  let showMonths = state.tlMonths || 12;
+  initTLSelection();
+  const zoom = state.tlZoom || 65;
+
+  const deptLegend = Object.entries(DEPT_COLORS).map(([dept, color]) =>
+    `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;white-space:nowrap">
+      <span style="width:13px;height:8px;background:${color};border-radius:2px;display:inline-block;opacity:.85;flex-shrink:0"></span>${dept}</span>`
+  ).join('');
 
   document.getElementById('content').innerHTML = `
     <div class="section" style="margin-bottom:10px">
       <div class="tl-controls">
-        <span style="font-size:12px;color:#666">表示期間:</span>
-        ${[6,12,18].map(m => `<button class="btn btn-sm ${showMonths===m?'btn-primary':'btn-outline'}" onclick="setTLMonths(${m})">${m}ヶ月</button>`).join('')}
-        <span style="flex:1"></span>
-        <button class="btn btn-sm btn-secondary" onclick="openModal('tl-item-modal')">＋ アイテム追加</button>
+        <span style="font-size:12px;color:#666">ズーム:</span>
+        ${[[45,'狭'],[65,'標準'],[90,'広']].map(([z,l]) => `<button class="btn btn-sm ${zoom===z?'btn-primary':'btn-outline'}" onclick="setTLZoom(${z})">${l}</button>`).join('')}
+        <button class="btn btn-sm btn-outline" onclick="scrollTLToday()" style="margin-left:8px">TODAY へ</button>
       </div>
-      <div style="font-size:11px;color:#888">
-        <span style="display:inline-block;width:14px;height:8px;background:#4472C4;border-radius:2px;vertical-align:middle;margin-right:4px;opacity:.8"></span>基準計画バー
-        <span style="display:inline-block;width:14px;height:8px;background:#FFC000;border-radius:2px;vertical-align:middle;margin-right:4px;opacity:.8"></span>予測バー
-        <span style="display:inline-block;width:12px;height:12px;background:#e53935;transform:rotate(45deg);vertical-align:middle;margin-right:4px"></span>マイルストーン
-        <span style="display:inline-block;width:2px;height:14px;background:orange;vertical-align:middle;margin-right:4px"></span>TODAY
+      <div style="font-size:11px;color:#888;line-height:2">
+        <span style="font-weight:600;margin-right:4px">基準計画バー（部門別）:</span>${deptLegend}
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 10px 4px 0">
+          <span style="width:13px;height:8px;background:#808080;border-radius:2px;display:inline-block;opacity:.85"></span>複数部門</span>
+        <br>
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
+          <span style="width:13px;height:6px;background:#A0A0A0;border-radius:2px;display:inline-block;opacity:.75"></span>実進捗バー</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
+          <span style="width:11px;height:11px;background:#e53935;transform:rotate(45deg);display:inline-block"></span>&nbsp;マイルストーン</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;margin:0 12px 0 0">
+          <span style="width:2px;height:14px;background:orange;display:inline-block"></span>TODAY</span>
+        <span style="display:inline-flex;align-items:center;gap:3px">
+          <span style="width:14px;height:10px;border:2px solid #e53935;display:inline-block;border-radius:2px"></span>クリティカルパス</span>
       </div>
     </div>
-    <div class="section" style="padding:12px">
-      <div id="tl-wrap" style="overflow-x:auto"></div>
+    <div class="section" style="padding:12px;margin-bottom:10px">
+      <div id="tl-outer">
+        <div id="tl-labels"></div>
+        <div id="tl-chart"></div>
+      </div>
+    </div>
+    <div class="section" style="padding:0;overflow:hidden">
+      <div id="tl-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;border-bottom:1px solid #eee" onclick="toggleTLPanel()">
+        <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
+        <span id="tl-panel-arrow">▼</span>
+      </div>
+      <div id="tl-task-list" style="max-height:280px;overflow-y:auto">
+        ${buildTLTaskListHTML()}
+      </div>
     </div>`;
 
-  drawTimeline(showMonths);
+  drawTimeline();
+  scrollTLToday();
 }
 
-window.setTLMonths = function(m) {
-  state.tlMonths = m;
+window.setTLZoom = function(z) {
+  state.tlZoom = z;
   renderTimeline();
 };
 
-function drawTimeline(showMonths) {
-  const wrap = document.getElementById('tl-wrap');
-  if (!wrap) return;
+window.scrollTLToday = function() {
+  const chartEl = document.getElementById('tl-chart');
+  const meta = state._tlChartMeta;
+  if (!chartEl || !meta) return;
+  const { startDate, endDate, chartW } = meta;
+  const rd = toDate(state.reportDate);
+  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, chartW]);
+  const todayX = xScale(rd);
+  chartEl.scrollLeft = Math.max(0, todayX - chartEl.clientWidth / 3);
+};
+
+function drawTimeline() {
+  const labelsEl = document.getElementById('tl-labels');
+  const chartEl  = document.getElementById('tl-chart');
+  if (!labelsEl || !chartEl) return;
 
   const rd = toDate(state.reportDate);
-  const startDate = new Date(rd.getFullYear(), rd.getMonth() - 2, 1);
-  const endDate   = new Date(startDate.getFullYear(), startDate.getMonth() + showMonths, 1);
 
-  // Tasks to show: level 1,2 summaries + milestones + manual items
-  const tlTasks = state.tasks.filter(t => (t.level <= 2 || t.duration === '0 days') && t.active !== 'いいえ');
-  const manualItems = state.timelineItems;
+  // ── Compute date range from all active tasks ──────────────────────────
+  let minD = null, maxD = null;
+  state.tasks.filter(t => t.active !== 'いいえ').forEach(t => {
+    const s = toDate(t.bstart), e = toDate(t.bend);
+    if (s && (!minD || s < minD)) minD = s;
+    if (e && (!maxD || e > maxD)) maxD = e;
+  });
+  state.timelineItems.forEach(m => {
+    const s = toDate(m.date || m.start), e = toDate(m.end || m.date || m.start);
+    if (s && (!minD || s < minD)) minD = s;
+    if (e && (!maxD || e > maxD)) maxD = e;
+  });
+  if (!minD) minD = new Date(rd.getFullYear(), rd.getMonth() - 3, 1);
+  if (!maxD) maxD = new Date(rd.getFullYear(), rd.getMonth() + 9, 1);
 
-  const allRows = [
-    ...tlTasks.map(t => ({
-      name: t.name,
-      bstart: toDate(t.bstart), bend: toDate(t.bend),
-      fstart: toDate(t.start),  fend:  toDate(t.end),
-      isMilestone: t.duration === '0 days',
-      status: t.status,
-      level: t.level,
-      source: 'auto',
-      color: null,
-    })),
-    ...manualItems.map(m => ({
-      name: m.name,
-      bstart: toDate(m.date || m.start), bend: toDate(m.end || m.date),
-      fstart: null, fend: null,
-      isMilestone: m.type === 'milestone',
-      status: null,
-      level: 3,
-      source: 'manual',
-      color: m.color,
-    })),
-  ].filter(r => {
-    const s = r.bstart, e = r.bend;
-    return s && (e >= startDate || s <= endDate);
+  const startDate = new Date(minD.getFullYear(), minD.getMonth() - 1, 1);
+  const endDate   = new Date(maxD.getFullYear(), maxD.getMonth() + 2, 1);
+
+  const PX_PER_MONTH = state.tlZoom || 65;
+  const totalMonths  = (endDate.getFullYear() - startDate.getFullYear()) * 12
+                     + (endDate.getMonth() - startDate.getMonth());
+  const chartW = Math.max(totalMonths * PX_PER_MONTH, 400);
+  state._tlChartMeta = { startDate, endDate, chartW };
+
+  // ── Rows ──────────────────────────────────────────────────────────────
+  const allRows = buildTLRows(); // selection-filtered, no date filter here
+
+  const labelW = 188;
+  const marginT = 44, marginB = 20;
+  const rowH = 34;
+  const H = marginT + allRows.length * rowH + marginB;
+
+  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, chartW]);
+
+  // ── Label SVG (fixed left column) ────────────────────────────────────
+  const labelSvg = d3.select(labelsEl).selectAll('svg').data([1]).join('svg')
+    .attr('width', labelW).attr('height', H);
+  labelSvg.selectAll('*').remove();
+
+  // header background
+  labelSvg.append('rect').attr('x', 0).attr('y', 0).attr('width', labelW).attr('height', marginT)
+    .attr('class', 'tl-label-bg');
+  // separator line
+  labelSvg.append('line').attr('x1', labelW - 1).attr('x2', labelW - 1)
+    .attr('y1', 0).attr('y2', H).attr('class', 'tl-label-sep');
+
+  allRows.forEach((row, i) => {
+    const y = marginT + i * rowH;
+    labelSvg.append('rect').attr('x', 0).attr('y', y).attr('width', labelW).attr('height', rowH)
+      .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
+
+    const indent = row.level === 1 ? 4 : row.level === 2 ? 14 : 22;
+    const label  = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
+    const icon   = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
+    const prefix = row.source === 'manual' ? '✏ ' : icon;
+
+    const lbl = labelSvg.append('text')
+      .attr('x', indent).attr('y', y + rowH / 2 + 4)
+      .attr('font-size', row.level === 1 ? '12px' : '11px')
+      .attr('font-weight', row.level <= 2 ? '600' : '400')
+      .attr('class', 'tl-task-text')
+      .text(prefix + label);
+    if (row.isSummary && row.id != null)
+      lbl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
   });
 
-  const W = Math.max(wrap.clientWidth - 8, 600);
-  const marginL = 180, marginR = 10, marginT = 48, marginB = 20;
-  const innerW = W - marginL - marginR;
-  const rowH = 34;
-  const H = marginT + allRows.length * rowH + marginB + 24;
+  // ── Chart SVG (scrollable) ────────────────────────────────────────────
+  const chartSvg = d3.select(chartEl).selectAll('svg').data([1]).join('svg')
+    .attr('width', chartW + 6).attr('height', H);
+  chartSvg.selectAll('*').remove();
 
-  const svg = d3.select('#tl-wrap').selectAll('svg').data([1]).join('svg')
-    .attr('width', W).attr('height', H);
-  svg.selectAll('*').remove();
+  const g = chartSvg.append('g').attr('transform', `translate(0,${marginT})`);
 
-  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, innerW]);
-  const g = svg.append('g').attr('transform', `translate(${marginL},${marginT})`);
+  // header bg for chart area
+  chartSvg.append('rect').attr('x', 0).attr('y', 0).attr('width', chartW + 6).attr('height', marginT)
+    .attr('class', 'tl-label-bg');
 
-  // Month gridlines + header
-  const months = d3.timeMonths(startDate, endDate);
-  months.forEach(m => {
+  // Month gridlines + labels
+  d3.timeMonths(startDate, endDate).forEach(m => {
     const x = xScale(m);
-    g.append('line').attr('x1', x).attr('x2', x).attr('y1', -28).attr('y2', allRows.length * rowH)
-      .attr('stroke', '#e0e0e0').attr('stroke-width', 1);
+    g.append('line').attr('x1', x).attr('x2', x).attr('y1', -marginT).attr('y2', allRows.length * rowH)
+      .attr('class', 'tl-gridline');
     g.append('text').attr('x', x + 4).attr('y', -14)
-      .attr('font-size', '10px').attr('fill', '#666')
+      .attr('font-size', '10px').attr('class', 'tl-month-text')
       .text(d3.timeFormat('%Y/%m')(m));
   });
 
   // TODAY line
   const tx = xScale(rd);
-  if (tx >= 0 && tx <= innerW) {
-    g.append('line').attr('x1', tx).attr('x2', tx).attr('y1', -28).attr('y2', allRows.length * rowH)
+  if (tx >= 0 && tx <= chartW) {
+    g.append('line').attr('x1', tx).attr('x2', tx).attr('y1', -marginT).attr('y2', allRows.length * rowH)
       .attr('stroke', 'orange').attr('stroke-width', 2).attr('stroke-dasharray', '4,3');
-    g.append('text').attr('x', tx + 2).attr('y', -32)
+    g.append('text').attr('x', tx + 2).attr('y', -marginT + 12)
       .attr('font-size', '10px').attr('fill', 'orange').text('TODAY');
   }
 
@@ -882,75 +1189,75 @@ function drawTimeline(showMonths) {
     const y = i * rowH;
     const rowG = g.append('g').attr('transform', `translate(0,${y})`);
 
-    // Row background (alternating)
-    rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', innerW).attr('height', rowH)
-      .attr('fill', i % 2 === 0 ? '#fafbff' : '#fff').attr('opacity', .5);
-
-    // Task name
-    const indent = row.level === 1 ? 0 : row.level === 2 ? 10 : 18;
-    const label = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
-    g.append('text').attr('x', -marginL + indent).attr('y', y + rowH / 2 + 4)
-      .attr('font-size', row.level === 1 ? '12px' : row.level === 2 ? '11px' : '11px')
-      .attr('font-weight', row.level <= 2 ? '600' : '400')
-      .attr('fill', '#333')
-      .text((row.source === 'manual' ? '✏ ' : '') + label);
+    rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', chartW).attr('height', rowH)
+      .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
 
     if (row.isMilestone) {
       const mx = xScale(row.bstart);
-      if (mx >= 0 && mx <= innerW) {
+      if (mx >= 0 && mx <= chartW) {
         const color = row.color || '#e53935';
         const d = 8;
-        const diamond = `M${mx},${rowH/2-d} L${mx+d},${rowH/2} L${mx},${rowH/2+d} L${mx-d},${rowH/2} Z`;
-        rowG.append('path').attr('d', diamond).attr('fill', color).attr('stroke', color);
+        rowG.append('path')
+          .attr('d', `M${mx},${rowH/2-d} L${mx+d},${rowH/2} L${mx},${rowH/2+d} L${mx-d},${rowH/2} Z`)
+          .attr('fill', color).attr('stroke', color);
         rowG.append('text').attr('x', mx + d + 4).attr('y', rowH / 2 + 4)
           .attr('font-size', '10px').attr('fill', color).attr('font-weight', '600')
           .text(row.name);
       }
     } else {
+      const barH = row.level <= 2 ? 14 : 10;
+      const barY = (rowH - barH) / 2;
       // Base plan bar
       if (row.bstart && row.bend) {
         const x1 = Math.max(0, xScale(row.bstart));
-        const x2 = Math.min(innerW, xScale(row.bend));
+        const x2 = Math.min(chartW, xScale(row.bend));
         if (x2 > x1) {
-          const barH = row.level <= 2 ? 14 : 10;
-          const barY = (rowH - barH) / 2;
-          const color = row.color || (row.level <= 2 ? '#4472C4' : '#4472C4');
-          rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
+          const color = row.color || getDeptColor(row.resource);
+          const barEl = rowG.append('rect')
+            .attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
             .attr('fill', color).attr('opacity', row.level <= 2 ? .85 : .7).attr('rx', 2)
-            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}`))
+            .on('mouseover', (e) => showTooltip(e,
+              `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}${row.critical ? '<br>🔴 クリティカルパス' : ''}`))
             .on('mouseout', hideTooltip);
+          // Critical path: red border
+          if (row.critical) {
+            rowG.append('rect')
+              .attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
+              .attr('fill', 'none').attr('stroke', '#e53935').attr('stroke-width', 2).attr('rx', 2);
+          }
+          if (row.isSummary && row.id != null)
+            barEl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
         }
       }
-      // Forecast bar (if differs from baseline)
-      if (row.fstart && row.fend) {
-        const bs = row.bstart?.getTime(), be = row.bend?.getTime();
-        const fs = row.fstart?.getTime(), fe = row.fend?.getTime();
-        if (bs !== fs || be !== fe) {
-          const x1 = Math.max(0, xScale(row.fstart));
-          const x2 = Math.min(innerW, xScale(row.fend));
-          if (x2 > x1) {
-            const barH = row.level <= 2 ? 8 : 6;
-            const barY = (rowH - barH) / 2 + (row.level <= 2 ? 3 : 2);
-            rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
-              .attr('fill', '#FFC000').attr('opacity', .75).attr('rx', 2)
-              .on('mouseover', (e) => showTooltip(e, `${row.name}<br>予測: ${row.fstart?.toLocaleDateString('ja-JP')} 〜 ${row.fend?.toLocaleDateString('ja-JP')}`))
-              .on('mouseout', hideTooltip);
-          }
+      // Actual progress bar
+      if (row.astart) {
+        const effectiveEnd = row.aend || rd;
+        const x1 = Math.max(0, xScale(row.astart));
+        const x2 = Math.min(chartW, xScale(effectiveEnd));
+        if (x2 > x1) {
+          const aBarH = row.level <= 2 ? 6 : 5;
+          rowG.append('rect')
+            .attr('x', x1).attr('y', barY + (barH - aBarH) / 2)
+            .attr('width', x2 - x1).attr('height', aBarH)
+            .attr('fill', '#A0A0A0').attr('opacity', .85).attr('rx', 1)
+            .on('mouseover', (e) => showTooltip(e,
+              `${row.name}<br>実績: ${row.astart?.toLocaleDateString('ja-JP')} 〜 ${row.aend ? row.aend.toLocaleDateString('ja-JP') : 'TODAY'}`))
+            .on('mouseout', hideTooltip);
         }
       }
     }
   });
 
-  // Manual items delete buttons (right side)
-  if (manualItems.length > 0) {
-    const startIdx = tlTasks.length;
-    manualItems.forEach((item, i) => {
-      const y = (startIdx + i) * rowH + rowH / 2 - 8;
-      svg.append('text').attr('x', W - marginR - 16).attr('y', marginT + y + 10)
-        .attr('font-size', '12px').attr('fill', '#e53935').attr('cursor', 'pointer')
-        .text('✕').on('click', () => { state.timelineItems.splice(i, 1); saveStorage(); renderTimeline(); });
-    });
-  }
+  // Manual items delete buttons
+  allRows.filter(r => r.source === 'manual').forEach(row => {
+    const ri = allRows.indexOf(row);
+    const origIdx = state.timelineItems.findIndex(m => m.id === row.id);
+    if (origIdx < 0) return;
+    g.append('text').attr('x', chartW - 4).attr('y', ri * rowH + rowH / 2 + 4)
+      .attr('font-size', '12px').attr('fill', '#e53935').attr('cursor', 'pointer')
+      .attr('text-anchor', 'end')
+      .text('✕').on('click', () => { state.timelineItems.splice(origIdx, 1); saveStorage(); renderTimeline(); });
+  });
 }
 
 // Timeline item modal
@@ -1330,7 +1637,7 @@ function drawGantt() {
   if (curMonth) monthGroups.push({label: curMonth, count: weekDates.length - curStart});
 
   // Fixed columns
-  const fixedCols = [
+  let fixedCols = [
     {key:'wbs',label:'WBS',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当',w:80},
     {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW',w:28}
   ];
@@ -1350,10 +1657,17 @@ function drawGantt() {
     }
   });
 
+  // Apply saved column order
+  const _ganttColOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
+  if (_ganttColOrder && _ganttColOrder.length === fixedCols.length) {
+    fixedCols = _ganttColOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
+    if (fixedCols.length !== _ganttColOrder.length) fixedCols = [{key:'wbs',label:'WBS'},{key:'name',label:'タスク名'},{key:'resource',label:'担当'},{key:'pct',label:'達成率'},{key:'status',label:'ステータス'},{key:'nw',label:'NW'}];
+  }
+
   let html = '<table class="gantt-table"><thead>';
   // Month row
   html += '<tr>';
-  fixedCols.forEach(c => html += `<th class="gt-cell" style="width:${c.w}px;min-width:${c.w}px" rowspan="2"></th>`);
+  fixedCols.forEach(c => html += `<th class="gt-cell" data-col-key="${c.key}" style="white-space:nowrap" rowspan="2">${c.label}</th>`);
   monthGroups.forEach(mg => html += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
   html += '</tr>';
   // Week row
@@ -1369,9 +1683,9 @@ function drawGantt() {
     const isSummary = task.isSummary;
     const isCollapsed = state.collapsedRows.has(task.id);
     const indent = task.level === 1 ? 'il1' : task.level === 2 ? 'il2' : task.level === 3 ? 'il3' : 'il4';
-    const rowBg = isSummary ? 'background:#f5f7fa' : '';
+    const rowBg = '';
 
-    html += `<tr class="${isCP ? 'cp-row' : ''}" style="${rowBg}">`;
+    html += `<tr class="${isCP ? 'cp-row' : ''}${isSummary ? ' gantt-summary-row' : ''}">`;
     fixedCols.forEach(c => {
       let val = '';
       if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
@@ -1385,7 +1699,7 @@ function drawGantt() {
       else if (c.key === 'nw') val = `<span class="nw-icon" onclick="jumpToNW(${task.id})">🔗</span>`;
       const stickyStyle = ['wbs','name','resource','pct','status','nw'].includes(c.key) ?
         'position:sticky;left:0;z-index:1;' : '';
-      html += `<td class="gt-cell" style="${rowBg};${stickyStyle}min-width:${c.w}px">${val}</td>`;
+      html += `<td class="gt-cell" style="${stickyStyle}white-space:nowrap">${val}</td>`;
     });
 
     const bstart = toDate(task.bstart), bend = toDate(task.bend);
@@ -1395,7 +1709,8 @@ function drawGantt() {
     weekDates.forEach(w => {
       const wEnd = new Date(w.getTime() + 6 * 86400000);
       const isToday = w <= today && wEnd >= today;
-      const bg = isToday ? 'background:#FFF3E0;' : '';
+      const bg = '';
+      const todayClass = isToday ? ' today-bg' : '';
 
       // Check overlaps
       const baseOverlap = bstart && bend && bstart <= wEnd && bend >= w;
@@ -1422,46 +1737,14 @@ function drawGantt() {
         cellContent += `<div class="gantt-bar-actual" style="left:${leftPct}%;width:${widPct}%"></div>`;
       }
       cellContent += '</div>';
-      html += `<td class="gantt-bar-cell" style="${bg}">${cellContent}</td>`;
+      html += `<td class="gantt-bar-cell${todayClass}">${cellContent}</td>`;
     });
     html += '</tr>';
   });
 
   html += '</tbody></table>';
   wrap.innerHTML = html;
-  // Resize only for fixed columns (first 6 th cells in the rowspan row)
-  const ganttTbl = wrap.querySelector('table');
-  if (ganttTbl) {
-    const fixedHeaderRow = ganttTbl.querySelector('thead tr:first-child');
-    if (fixedHeaderRow) {
-      [...fixedHeaderRow.cells].forEach((th, i) => {
-        if (th.rowSpan < 2) return;
-        th.style.position = 'relative';
-        const key = 'pj_column_widths_gantt';
-        const saved = JSON.parse(localStorage.getItem(key) || '{}');
-        if (saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
-        const handle = document.createElement('div');
-        handle.className = 'col-resizer';
-        th.appendChild(handle);
-        handle.addEventListener('mousedown', (e) => {
-          e.preventDefault(); e.stopPropagation();
-          handle.classList.add('resizing');
-          const startX = e.clientX, startW = th.offsetWidth;
-          const onMove = (e) => { const w = Math.max(30, startW + e.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
-          const onUp = () => {
-            handle.classList.remove('resizing');
-            const ths = [...fixedHeaderRow.cells].filter(t => t.rowSpan >= 2);
-            const widths = {}; ths.forEach((t, idx) => { widths[idx] = t.offsetWidth + 'px'; });
-            localStorage.setItem(key, JSON.stringify(widths));
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-          };
-          document.addEventListener('mousemove', onMove);
-          document.addEventListener('mouseup', onUp);
-        });
-      });
-    }
-  }
+  enhanceGanttTable(wrap);
 }
 
 window.toggleGanttRow = function(id) {
@@ -1794,10 +2077,11 @@ function enhanceTable(tableEl, screenId) {
   applyColFilter(tableEl, screenId);
 }
 
-// --- Column Resize ---
+// --- Column Resize (auto-fit on first load) ---
 function applyColResize(tableEl, screenId) {
   const key = 'pj_column_widths_' + screenId;
   const saved = JSON.parse(localStorage.getItem(key) || '{}');
+  const hasSaved = Object.keys(saved).length > 0;
   const thead = tableEl.querySelector('thead');
   if (!thead) return;
   const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
@@ -1805,7 +2089,7 @@ function applyColResize(tableEl, screenId) {
   const ths = [...headerRow.cells];
   ths.forEach((th, i) => {
     th.style.position = 'relative';
-    if (saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
+    if (hasSaved && saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
     handle.className = 'col-resizer';
@@ -1815,7 +2099,7 @@ function applyColResize(tableEl, screenId) {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (e) => { const w = Math.max(30, startW + e.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
       const onUp = () => {
         handle.classList.remove('resizing');
         const ws = {}; ths.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
@@ -1827,6 +2111,14 @@ function applyColResize(tableEl, screenId) {
       document.addEventListener('mouseup', onUp);
     });
   });
+  // Save browser auto-sized widths on first load
+  if (!hasSaved) {
+    requestAnimationFrame(() => {
+      const ws = {};
+      ths.forEach((t, idx) => { if (t.offsetWidth > 0) ws[idx] = t.offsetWidth + 'px'; });
+      if (Object.keys(ws).length > 0) localStorage.setItem(key, JSON.stringify(ws));
+    });
+  }
 }
 
 // --- Column Filter ---
@@ -1920,7 +2212,7 @@ function applyColFilter(tableEl, screenId) {
   });
 }
 
-// --- Column Reorder ---
+// --- Column Reorder (data-col-orig tracking for stable multi-drag) ---
 function applyColReorder(tableEl, screenId) {
   const key = 'pj_column_order_' + screenId;
   const thead = tableEl.querySelector('thead');
@@ -1928,49 +2220,211 @@ function applyColReorder(tableEl, screenId) {
   const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
   if (!headerRow) return;
 
+  // Stamp original indices on th and matching td cells (idempotent)
+  const origThs = [...headerRow.cells];
+  origThs.forEach((th, i) => {
+    if (!th.hasAttribute('data-col-orig')) {
+      th.setAttribute('data-col-orig', i);
+      tableEl.querySelectorAll('tbody tr').forEach(row => {
+        if (row.cells[i]) row.cells[i].setAttribute('data-col-orig', i);
+      });
+    }
+  });
+
   const savedOrder = JSON.parse(localStorage.getItem(key) || 'null');
-  if (savedOrder && savedOrder.length === headerRow.cells.length) {
-    reorderTableCols(tableEl, savedOrder);
+  if (savedOrder && savedOrder.length === origThs.length) {
+    _applyColOrderByOrig(tableEl, savedOrder);
   }
 
   const ths = [...headerRow.cells];
-  let dragIdx = null;
-  ths.forEach((th, i) => {
+  ths.forEach((th) => {
     th.setAttribute('draggable', 'true');
     th.addEventListener('dragstart', (e) => {
-      dragIdx = i; e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => th.style.opacity = '0.4', 0);
+      e.dataTransfer.setData('text/plain', th.getAttribute('data-col-orig'));
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => th.style.opacity = '0.4');
     });
     th.addEventListener('dragend', () => {
       th.style.opacity = '';
       ths.forEach(t => t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
-      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      e.preventDefault();
       ths.forEach(t => t.classList.remove('drag-over'));
       th.classList.add('drag-over');
     });
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
-      if (dragIdx === null || dragIdx === i) return;
-      const order = ths.map((_, idx) => idx);
-      const moved = order.splice(dragIdx, 1)[0];
-      order.splice(i, 0, moved);
-      reorderTableCols(tableEl, order);
-      localStorage.setItem(key, JSON.stringify(order));
+      const srcOrig = parseInt(e.dataTransfer.getData('text/plain'));
+      const tgtOrig = parseInt(th.getAttribute('data-col-orig'));
+      if (isNaN(srcOrig) || isNaN(tgtOrig) || srcOrig === tgtOrig) return;
+      const currentOrder = [...headerRow.cells].map(t => parseInt(t.getAttribute('data-col-orig')));
+      const srcVI = currentOrder.indexOf(srcOrig);
+      const tgtVI = currentOrder.indexOf(tgtOrig);
+      if (srcVI === -1 || tgtVI === -1) return;
+      const newOrder = [...currentOrder];
+      newOrder.splice(tgtVI, 0, newOrder.splice(srcVI, 1)[0]);
+      _applyColOrderByOrig(tableEl, newOrder);
+      localStorage.setItem(key, JSON.stringify(newOrder));
       applyColResize(tableEl, screenId);
       applyColFilter(tableEl, screenId);
-      dragIdx = null;
     });
   });
 }
 
-function reorderTableCols(tableEl, order) {
+function _applyColOrderByOrig(tableEl, orderByOrig) {
   tableEl.querySelectorAll('tr').forEach(row => {
-    if (row.cells.length !== order.length) return;
     const cells = [...row.cells];
-    order.forEach(origIdx => row.appendChild(cells[origIdx]));
+    const origMap = {};
+    cells.forEach(cell => {
+      const o = cell.getAttribute('data-col-orig');
+      if (o !== null) origMap[parseInt(o)] = cell;
+    });
+    if (Object.keys(origMap).length === 0) {
+      if (cells.length !== orderByOrig.length) return;
+      orderByOrig.forEach(origIdx => row.appendChild(cells[origIdx]));
+    } else {
+      orderByOrig.forEach(origIdx => { if (origMap[origIdx] !== undefined) row.appendChild(origMap[origIdx]); });
+    }
+  });
+}
+
+// --- Gantt-specific enhance (fixed columns only) ---
+function enhanceGanttTable(wrap) {
+  const table = wrap.querySelector('table');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  if (!thead) return;
+  const firstRow = thead.querySelector('tr:first-child');
+  if (!firstRow) return;
+  const fixedThs = [...firstRow.cells].filter(th => th.rowSpan >= 2);
+  if (fixedThs.length === 0) return;
+
+  // Resize
+  const resizeKey = 'pj_column_widths_gantt';
+  const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
+  const hasSavedW = Object.keys(savedW).length > 0;
+  fixedThs.forEach((th, i) => {
+    th.style.position = 'relative';
+    if (hasSavedW && savedW[i]) { th.style.width = savedW[i]; th.style.minWidth = savedW[i]; }
+    th.querySelectorAll('.col-resizer').forEach(r => r.remove());
+    const handle = document.createElement('div');
+    handle.className = 'col-resizer'; handle.setAttribute('draggable', 'false');
+    th.appendChild(handle);
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      handle.classList.add('resizing');
+      const startX = e.clientX, startW = th.offsetWidth;
+      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onUp = () => {
+        handle.classList.remove('resizing');
+        const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
+        localStorage.setItem(resizeKey, JSON.stringify(ws));
+        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    });
+  });
+  if (!hasSavedW) {
+    requestAnimationFrame(() => {
+      const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
+      if (Object.keys(ws).length > 0) localStorage.setItem(resizeKey, JSON.stringify(ws));
+    });
+  }
+
+  // Filter (fixed columns only)
+  const filterKey = 'pj_filters_gantt';
+  const savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
+  const trs = [...table.querySelectorAll('tbody tr')];
+  function applyGanttFilter() {
+    trs.forEach(tr => {
+      let visible = true;
+      Object.entries(savedF).forEach(([ci, allowed]) => {
+        if (!allowed) return;
+        const td = tr.cells[parseInt(ci)];
+        const val = td ? td.textContent.trim() : '';
+        if (!allowed.includes(val)) visible = false;
+      });
+      tr.style.display = visible ? '' : 'none';
+    });
+    localStorage.setItem(filterKey, JSON.stringify(savedF));
+  }
+  applyGanttFilter();
+  fixedThs.forEach((th, colIdx) => {
+    th.querySelectorAll('.filter-btn').forEach(b => b.remove());
+    const vals = [...new Set(trs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
+    if (vals.length === 0) return;
+    const btn = document.createElement('span');
+    btn.className = 'filter-btn' + (savedF[colIdx] ? ' active' : '');
+    btn.textContent = '▼'; btn.title = 'フィルター'; th.appendChild(btn);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      document.querySelectorAll('.col-filter-dropdown').forEach(d => d.remove());
+      const selected = savedF[colIdx] || vals;
+      const dd = document.createElement('div'); dd.className = 'col-filter-dropdown';
+      const allWrap = document.createElement('div');
+      allWrap.style.cssText = 'padding:4px 0;border-bottom:1px solid #eee;margin-bottom:6px;font-weight:600;display:flex;align-items:center;gap:6px;';
+      const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.checked = !savedF[colIdx];
+      allWrap.appendChild(allCb); allWrap.appendChild(document.createTextNode('すべて選択')); dd.appendChild(allWrap);
+      const itemCbs = [];
+      vals.forEach(val => {
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;';
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = val; cb.checked = selected.includes(val);
+        lbl.appendChild(cb); lbl.appendChild(document.createTextNode(val)); dd.appendChild(lbl); itemCbs.push(cb);
+        cb.addEventListener('change', () => {
+          const checked = itemCbs.filter(c => c.checked).map(c => c.value);
+          savedF[colIdx] = checked.length === vals.length ? null : checked;
+          allCb.checked = !savedF[colIdx]; btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+        });
+      });
+      allCb.addEventListener('change', () => {
+        savedF[colIdx] = allCb.checked ? null : [];
+        itemCbs.forEach(c => c.checked = allCb.checked);
+        btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+      });
+      const rect = btn.getBoundingClientRect();
+      dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom + 2) + 'px';
+      document.body.appendChild(dd);
+      setTimeout(() => {
+        document.addEventListener('click', function closeDD(ev) {
+          if (!dd.contains(ev.target)) { dd.remove(); document.removeEventListener('click', closeDD); }
+        });
+      }, 0);
+    });
+  });
+
+  // Reorder (save as key array, triggers re-render)
+  const reorderKey = 'pj_column_order_gantt';
+  fixedThs.forEach((th) => {
+    th.setAttribute('draggable', 'true');
+    th.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', th.getAttribute('data-col-key') || '');
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => th.style.opacity = '0.4');
+    });
+    th.addEventListener('dragend', () => {
+      th.style.opacity = ''; fixedThs.forEach(t => t.classList.remove('drag-over'));
+    });
+    th.addEventListener('dragover', (e) => {
+      e.preventDefault(); fixedThs.forEach(t => t.classList.remove('drag-over')); th.classList.add('drag-over');
+    });
+    th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
+    th.addEventListener('drop', (e) => {
+      e.preventDefault(); th.classList.remove('drag-over');
+      const srcKey = e.dataTransfer.getData('text/plain');
+      const tgtKey = th.getAttribute('data-col-key');
+      if (!srcKey || !tgtKey || srcKey === tgtKey) return;
+      const currentKeys = [...firstRow.cells].filter(t => t.rowSpan >= 2).map(t => t.getAttribute('data-col-key'));
+      const srcVI = currentKeys.indexOf(srcKey);
+      const tgtVI = currentKeys.indexOf(tgtKey);
+      if (srcVI === -1 || tgtVI === -1) return;
+      const newKeys = [...currentKeys];
+      newKeys.splice(tgtVI, 0, newKeys.splice(srcVI, 1)[0]);
+      localStorage.setItem(reorderKey, JSON.stringify(newKeys));
+      drawGantt();
+    });
   });
 }
 
