@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PJ進捗管理ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;font-size:13px;background:#f0f2f5;display:flex;height:100vh;overflow:hidden;color:#333}
+/* Sidebar */
+#sidebar{width:210px;background:#1a3a5c;color:#fff;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar-logo{padding:14px 16px;font-size:14px;font-weight:700;border-bottom:1px solid rgba(255,255,255,.2);letter-spacing:.5px}
+.sidebar-info{padding:10px 16px;font-size:11px;color:rgba(255,255,255,.7);border-bottom:1px solid rgba(255,255,255,.15);line-height:1.7}
+#sidebar nav a{display:flex;align-items:center;gap:8px;padding:11px 16px;color:rgba(255,255,255,.82);text-decoration:none;cursor:pointer;transition:background .15s;font-size:12px}
+#sidebar nav a:hover,#sidebar nav a.active{background:rgba(255,255,255,.15);color:#fff}
+.sidebar-footer{margin-top:auto;padding:12px}
+/* Main */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#topbar{background:#fff;border-bottom:1px solid #ddd;padding:8px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#topbar h1{font-size:15px;font-weight:600;color:#1a3a5c}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.topbar-right label{font-size:11px;color:#666}
+#content{flex:1;overflow-y:auto;padding:16px}
+/* KPI Cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.kpi-card{background:#fff;border-radius:8px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid #ccc}
+.kpi-card .kpi-label{font-size:11px;color:#888;margin-bottom:6px}
+.kpi-card .kpi-val{font-size:30px;font-weight:700}
+.kpi-card.ongoing{border-color:#00B050}.kpi-card.ongoing .kpi-val{color:#00B050}
+.kpi-card.delay{border-color:#FF0000}.kpi-card.delay .kpi-val{color:#FF0000}
+.kpi-card.close{border-color:#0070C0}.kpi-card.close .kpi-val{color:#0070C0}
+.kpi-card.nactive{border-color:#808080}.kpi-card.nactive .kpi-val{color:#808080}
+/* Status badges */
+.badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:600;white-space:nowrap}
+.s-ongoing{color:#00B050;background:#E2EFDA}.s-delay{color:#FF0000;background:#FFE0E0}
+.s-close{color:#0070C0;background:#DDEEFF}.s-nactive{color:#808080;background:#F2F2F2}
+.s-disable{color:#BFBFBF;background:#F2F2F2}
+/* Sections */
+.section{background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.section h2{font-size:13px;font-weight:600;margin-bottom:10px;color:#1a3a5c;border-left:3px solid #1a3a5c;padding-left:8px;display:flex;align-items:center;justify-content:space-between}
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#f5f7fa;padding:7px 6px;text-align:left;font-weight:600;border-bottom:2px solid #e0e0e0;white-space:nowrap;font-size:11px;color:#555}
+td{padding:6px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+tr:hover td{background:#fafbff}
+.cp-badge{background:#e53935;color:#fff;font-size:9px;padding:1px 4px;border-radius:2px;margin-left:3px;vertical-align:middle}
+/* Indent */
+.il1{padding-left:0;font-weight:700;font-size:12px}
+.il2{padding-left:14px;font-weight:600}
+.il3{padding-left:28px}
+.il4{padding-left:42px}
+/* Buttons */
+.btn{padding:5px 13px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-weight:500;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:#1a3a5c;color:#fff}
+.btn-secondary{background:#4472C4;color:#fff}
+.btn-success{background:#00B050;color:#fff}
+.btn-danger{background:#e53935;color:#fff}
+.btn-outline{background:#fff;border:1px solid #ccc;color:#333}
+.btn-sm{padding:3px 8px;font-size:11px}
+/* NW Graph */
+#nw-wrap{display:flex;gap:0;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
+#nw-svg-container{flex:1;min-height:560px;position:relative;overflow:hidden;cursor:grab;background:#f8f9fc}
+#nw-svg-container:active{cursor:grabbing}
+#nw-svg{width:100%;height:100%}
+#nw-panel{width:270px;border-left:1px solid #e0e0e0;padding:14px;overflow-y:auto;font-size:12px;background:#fff;flex-shrink:0}
+#nw-panel h3{font-size:13px;font-weight:600;margin-bottom:10px;color:#1a3a5c}
+.nw-detail-row{display:flex;margin-bottom:6px;gap:6px}
+.nw-detail-label{width:80px;font-size:11px;color:#888;flex-shrink:0}
+.nw-detail-val{flex:1;font-weight:500}
+.nw-controls{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+/* Timeline */
+#tl-wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:16px;overflow-x:auto}
+.tl-controls{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+/* Gantt */
+#gantt-wrap{overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.gantt-table{border-collapse:collapse;font-size:11px;min-width:100%}
+.gantt-table th,.gantt-table td{border:1px solid #e8e8e8;padding:0}
+.gantt-table .gt-cell{padding:4px 5px;white-space:nowrap}
+.gantt-table .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:4px 2px}
+.gantt-table .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px}
+.gantt-bar-cell{min-width:20px;padding:0;position:relative;height:26px}
+.gantt-bar-base{position:absolute;height:8px;top:4px;border-radius:1px;background:#4472C4;opacity:.8}
+.gantt-bar-actual{position:absolute;height:7px;top:14px;border-radius:1px;background:#70AD47;opacity:.9}
+.today-col{background:#FFF3E0 !important}
+.cp-row td:first-child{border-left:3px solid #e53935}
+.gantt-controls{display:flex;gap:8px;padding:10px;border-bottom:1px solid #eee;align-items:center}
+.collapsed-children{display:none}
+/* Meeting */
+.mtg-section{margin-bottom:14px}
+.mtg-section-title{font-size:12px;font-weight:600;padding:7px 10px;border-radius:4px;margin-bottom:8px}
+.mtg-delay{background:#FFEBEE;color:#C62828}
+.mtg-upcoming-start{background:#FFF8E1;color:#E65100}
+.mtg-upcoming-end{background:#E8F5E9;color:#1B5E20}
+.mtg-cp{background:#FFEBEE;color:#C62828}
+textarea.comment-input{border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px;width:140px;resize:none;height:38px;font-family:inherit}
+textarea.comment-input.saved{background:#E8F5E9;border-color:#A5D6A7}
+/* Actions */
+.action-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.action-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:#f9f9f9;border-radius:6px;border-left:3px solid #ccc}
+.action-item.high{border-color:#e53935}
+.action-item.mid{border-color:#FB8C00}
+.action-item.low{border-color:#43A047}
+.action-item.done-item{opacity:.5}
+.action-content{flex:1;font-size:12px}
+.action-meta{font-size:10px;color:#888;margin-top:2px}
+/* Dept */
+.dept-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.dept-tab{padding:5px 10px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#f5f5f5;font-size:11px;font-weight:500;transition:all .15s}
+.dept-tab.active{background:#1a3a5c;color:#fff;border-color:#1a3a5c}
+.dept-tab:hover:not(.active){background:#e8edf5}
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:8px;padding:22px;width:440px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+.modal h3{margin-bottom:14px;font-size:14px;color:#1a3a5c}
+.form-row{margin-bottom:10px}
+.form-row label{display:block;font-size:11px;margin-bottom:3px;color:#666;font-weight:500}
+.form-row input,.form-row select,.form-row textarea{width:100%;border:1px solid #ccc;border-radius:4px;padding:5px 8px;font-size:12px;font-family:inherit}
+.form-row textarea{resize:vertical;min-height:56px}
+.modal-btns{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+/* Tooltip */
+.tooltip{position:fixed;background:rgba(20,20,30,.88);color:#fff;padding:7px 11px;border-radius:5px;font-size:11px;pointer-events:none;z-index:9999;display:none;max-width:280px;line-height:1.6}
+/* File drop */
+.file-area{text-align:center;padding:16px;background:#f9f9f9;border:2px dashed #ccc;border-radius:8px;margin-bottom:12px;font-size:12px;color:#888}
+/* NW node */
+.nw-node{cursor:pointer}
+/* Misc */
+.nw-icon{cursor:pointer;color:#4472C4;font-size:13px;display:inline-block;transition:transform .1s}
+.nw-icon:hover{transform:scale(1.3);color:#1a3a5c}
+.flex-row{display:flex;align-items:center;gap:8px}
+.text-muted{color:#888;font-size:11px}
+.pct-bar{display:inline-block;width:50px;height:6px;background:#e0e0e0;border-radius:3px;vertical-align:middle;margin-right:4px;position:relative;overflow:hidden}
+.pct-fill{position:absolute;left:0;top:0;height:100%;background:#4472C4;border-radius:3px}
+/* Print */
+@media print{
+  #sidebar,#topbar .topbar-right,.btn,.nw-controls,.tl-controls,.gantt-controls,.dept-tabs,.modal-overlay{display:none!important}
+  body{overflow:visible}
+  #main{overflow:visible}
+  #content{overflow:visible;padding:0}
+  .section,.kpi-card{box-shadow:none;border:1px solid #ddd}
+  page{size:A3 landscape}
+}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#f1f1f1}
+::-webkit-scrollbar-thumb{background:#bbb;border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<div id="sidebar">
+  <div class="sidebar-logo">📊 PJ進捗管理</div>
+  <div class="sidebar-info">
+    <div id="sb-pj-name" style="font-weight:600;color:#fff;margin-bottom:2px">医療機器開発PJ-A</div>
+    <div>報告日: <span id="sb-report-date">2026-05-18</span></div>
+  </div>
+  <nav id="sidebar-nav">
+    <a data-screen="dashboard" class="active">🏠 ダッシュボード</a>
+    <a data-screen="timeline">📅 大日程タイムライン</a>
+    <a data-screen="nw">🔗 NW図</a>
+    <a data-screen="gantt">📋 ガントチャート</a>
+    <a data-screen="meeting">📝 定例ビュー</a>
+    <a data-screen="dept">👥 機能別進捗報告</a>
+  </nav>
+  <div class="sidebar-footer">
+    <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none">
+    <button class="btn btn-outline" style="width:100%;font-size:11px" onclick="document.getElementById('excel-file-input').click()">📂 Excelインポート</button>
+  </div>
+</div>
+
+<!-- ===== MAIN ===== -->
+<div id="main">
+  <div id="topbar">
+    <h1 id="topbar-title">ダッシュボード</h1>
+    <div class="topbar-right">
+      <label>PJ名: <input type="text" id="input-pj-name" style="width:160px;border:1px solid #ccc;border-radius:4px;padding:3px 7px;font-size:12px"></label>
+      <label>状況報告日: <input type="date" id="input-report-date" style="border:1px solid #ccc;border-radius:4px;padding:3px 7px;font-size:12px"></label>
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
+      <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 印刷</button>
+    </div>
+  </div>
+  <div id="content"></div>
+</div>
+
+<!-- ===== MODALS ===== -->
+<div class="modal-overlay" id="action-modal">
+  <div class="modal">
+    <h3>＋ アクション追加</h3>
+    <div class="form-row"><label>内容</label><textarea id="act-content" rows="2"></textarea></div>
+    <div class="form-row"><label>担当者</label><input type="text" id="act-owner"></div>
+    <div class="form-row"><label>期限</label><input type="date" id="act-deadline"></div>
+    <div class="form-row"><label>優先度</label>
+      <select id="act-priority"><option>高</option><option selected>中</option><option>低</option></select>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('action-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="addAction()">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="tl-item-modal">
+  <div class="modal">
+    <h3>＋ タイムラインアイテム追加</h3>
+    <div class="form-row"><label>表示名</label><input type="text" id="tl-name"></div>
+    <div class="form-row"><label>種類</label>
+      <select id="tl-type"><option value="phase">フェーズ</option><option value="milestone">マイルストーン</option></select>
+    </div>
+    <div class="form-row" id="tl-date-row1"><label>開始日</label><input type="date" id="tl-start"></div>
+    <div class="form-row" id="tl-date-row2"><label>終了日</label><input type="date" id="tl-end"></div>
+    <div class="form-row"><label>表示色</label><input type="color" id="tl-color" value="#7030A0" style="width:60px;height:30px;padding:2px;border:1px solid #ccc;border-radius:4px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('tl-item-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="addTimelineItem()">追加</button>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// =====================================================================
+// SAMPLE DATA (30 tasks – 医療機器開発プロジェクト)
+// =====================================================================
+const SAMPLE_TASKS = [
+  // ── レベル1サマリー ──
+  {id:1,wbs:'1',level:1,name:'医療機器開発PJ-A',note:'プロジェクト全体',duration:'',
+   start:'2026-01-05',end:'2026-12-25',bstart:'2026-01-05',bend:'2026-12-25',
+   astart:'2026-01-05',aend:null,remain:'180 days',
+   pred:'',resource:'Pj-L',pct:38,critical:'いいえ',active:'はい',isSummary:true},
+  // ── フェーズ1：企画・要件 ──
+  {id:2,wbs:'1.1',level:2,name:'企画・要件フェーズ',note:'',duration:'',
+   start:'2026-01-05',end:'2026-03-13',bstart:'2026-01-05',bend:'2026-03-13',
+   astart:'2026-01-05',aend:'2026-03-13',remain:'0 days',
+   pred:'',resource:'Pj-L',pct:100,critical:'いいえ',active:'はい',isSummary:true},
+  {id:3,wbs:'1.1.1',level:3,name:'製品要件定義書作成',note:'製品要件・ユーザーニーズを文書化',duration:'18 days',
+   start:'2026-01-05',end:'2026-01-30',bstart:'2026-01-05',bend:'2026-01-30',
+   astart:'2026-01-05',aend:'2026-01-30',remain:'0 days',
+   pred:'',resource:'RA',pct:100,critical:'いいえ',active:'はい',isSummary:false},
+  {id:4,wbs:'1.1.2',level:3,name:'規制要件調査（QMS/薬機法）',note:'IEC 62304・QMS要求整理',duration:'18 days',
+   start:'2026-02-02',end:'2026-02-27',bstart:'2026-02-02',bend:'2026-02-27',
+   astart:'2026-02-02',aend:'2026-02-27',remain:'0 days',
+   pred:'3',resource:'RA',pct:100,critical:'いいえ',active:'はい',isSummary:false},
+  {id:5,wbs:'1.1.3',level:3,name:'市場調査・競合分析',note:'',duration:'18 days',
+   start:'2026-01-19',end:'2026-02-13',bstart:'2026-01-19',bend:'2026-02-13',
+   astart:'2026-01-19',aend:'2026-02-13',remain:'0 days',
+   pred:'3',resource:'Market',pct:100,critical:'いいえ',active:'はい',isSummary:false},
+  {id:6,wbs:'1.1.4',level:3,name:'IP調査・特許分析',note:'',duration:'37 days',
+   start:'2026-01-19',end:'2026-03-13',bstart:'2026-01-19',bend:'2026-03-13',
+   astart:'2026-01-19',aend:'2026-03-06',remain:'0 days',
+   pred:'3',resource:'IP',pct:100,critical:'いいえ',active:'はい',isSummary:false},
+  // ── フェーズ2：設計・開発 ──
+  {id:7,wbs:'1.2',level:2,name:'設計・開発フェーズ',note:'',duration:'',
+   start:'2026-03-02',end:'2026-07-31',bstart:'2026-03-02',bend:'2026-07-31',
+   astart:'2026-03-02',aend:null,remain:'55 days',
+   pred:'2',resource:'Pj-L',pct:52,critical:'いいえ',active:'はい',isSummary:true},
+  {id:8,wbs:'1.2.1',level:3,name:'システムアーキテクチャ設計',note:'HW/SWアーキテクチャ確定',duration:'18 days',
+   start:'2026-03-02',end:'2026-03-27',bstart:'2026-03-02',bend:'2026-03-27',
+   astart:'2026-03-02',aend:'2026-03-27',remain:'0 days',
+   pred:'4',resource:'EL, SW',pct:100,critical:'はい',active:'はい',isSummary:false},
+  {id:9,wbs:'1.2.2',level:3,name:'電気回路設計（電源・センサー）',note:'電源回路部分が遅延中',duration:'18 days',
+   start:'2026-03-30',end:'2026-04-24',bstart:'2026-03-30',bend:'2026-04-24',
+   astart:'2026-03-30',aend:null,remain:'5 days',
+   pred:'8',resource:'EL',pct:88,critical:'はい',active:'はい',isSummary:false},
+  {id:10,wbs:'1.2.3',level:3,name:'SW基本設計',note:'',duration:'14 days',
+   start:'2026-03-30',end:'2026-04-17',bstart:'2026-03-30',bend:'2026-04-17',
+   astart:'2026-03-30',aend:'2026-04-17',remain:'0 days',
+   pred:'8',resource:'SW',pct:100,critical:'いいえ',active:'はい',isSummary:false},
+  {id:11,wbs:'1.2.4',level:3,name:'SW詳細設計（UI・通信プロトコル）',note:'UI仕様の確定に時間を要している',duration:'18 days',
+   start:'2026-04-20',end:'2026-05-20',bstart:'2026-04-20',bend:'2026-05-15',
+   astart:'2026-04-20',aend:null,remain:'5 days',
+   pred:'10',resource:'SW',pct:75,critical:'いいえ',active:'はい',isSummary:false},
+  {id:12,wbs:'1.2.5',level:3,name:'ファームウェア実装',note:'電気回路設計完了後に着手',duration:'24 days',
+   start:'2026-04-27',end:'2026-05-29',bstart:'2026-04-27',bend:'2026-05-22',
+   astart:'2026-04-27',aend:null,remain:'15 days',
+   pred:'9',resource:'EL',pct:40,critical:'はい',active:'はい',isSummary:false},
+  {id:13,wbs:'1.2.6',level:3,name:'SW実装（アプリケーション層）',note:'詳細設計完了後に着手予定',duration:'30 days',
+   start:'2026-05-18',end:'2026-06-26',bstart:'2026-05-18',bend:'2026-06-26',
+   astart:null,aend:null,remain:'30 days',
+   pred:'11',resource:'SW',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  {id:14,wbs:'1.2.7',level:3,name:'機構・筐体設計',note:'',duration:'28 days',
+   start:'2026-03-30',end:'2026-05-08',bstart:'2026-03-30',bend:'2026-04-30',
+   astart:'2026-03-30',aend:null,remain:'5 days',
+   pred:'8',resource:'工場',pct:70,critical:'いいえ',active:'はい',isSummary:false},
+  {id:15,wbs:'1.2.8',level:3,name:'量産工程設計',note:'',duration:'18 days',
+   start:'2026-05-11',end:'2026-06-05',bstart:'2026-05-11',bend:'2026-06-05',
+   astart:null,aend:null,remain:'18 days',
+   pred:'14',resource:'工場',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  // ── フェーズ3：試作・検証 ──
+  {id:16,wbs:'1.3',level:2,name:'試作・検証フェーズ',note:'',duration:'',
+   start:'2026-06-08',end:'2026-09-25',bstart:'2026-06-08',bend:'2026-09-25',
+   astart:null,aend:null,remain:'80 days',
+   pred:'7',resource:'Pj-L',pct:0,critical:'いいえ',active:'はい',isSummary:true},
+  {id:17,wbs:'1.3.1',level:3,name:'試作品製作・組立',note:'',duration:'14 days',
+   start:'2026-06-08',end:'2026-06-26',bstart:'2026-06-08',bend:'2026-06-26',
+   astart:null,aend:null,remain:'14 days',
+   pred:'12,15',resource:'工場',pct:0,critical:'はい',active:'はい',isSummary:false},
+  {id:18,wbs:'1.3.2',level:3,name:'電気系・ファームウェア検証',note:'',duration:'14 days',
+   start:'2026-06-29',end:'2026-07-17',bstart:'2026-06-29',bend:'2026-07-17',
+   astart:null,aend:null,remain:'14 days',
+   pred:'17',resource:'EL, VV',pct:0,critical:'はい',active:'はい',isSummary:false},
+  {id:19,wbs:'1.3.3',level:3,name:'SW結合テスト',note:'',duration:'23 days',
+   start:'2026-06-29',end:'2026-07-31',bstart:'2026-06-29',bend:'2026-07-31',
+   astart:null,aend:null,remain:'23 days',
+   pred:'17,13',resource:'SW, VV',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  {id:20,wbs:'1.3.4',level:3,name:'システム結合テスト',note:'',duration:'14 days',
+   start:'2026-08-03',end:'2026-08-21',bstart:'2026-08-03',bend:'2026-08-21',
+   astart:null,aend:null,remain:'14 days',
+   pred:'18,19',resource:'VV',pct:0,critical:'はい',active:'はい',isSummary:false},
+  {id:21,wbs:'1.3.5',level:3,name:'安全性試験（IEC 60601）',note:'IEC 60601準拠の安全性評価',duration:'14 days',
+   start:'2026-08-24',end:'2026-09-11',bstart:'2026-08-24',bend:'2026-09-11',
+   astart:null,aend:null,remain:'14 days',
+   pred:'20',resource:'BRT, VV',pct:0,critical:'はい',active:'はい',isSummary:false},
+  {id:22,wbs:'1.3.6',level:3,name:'性能評価・EMC試験',note:'',duration:'18 days',
+   start:'2026-09-01',end:'2026-09-25',bstart:'2026-09-01',bend:'2026-09-25',
+   astart:null,aend:null,remain:'18 days',
+   pred:'20',resource:'BRT',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  // ── フェーズ4：薬事・認証 ──
+  {id:23,wbs:'1.4',level:2,name:'薬事・認証フェーズ',note:'',duration:'',
+   start:'2026-09-28',end:'2026-11-28',bstart:'2026-09-28',bend:'2026-11-28',
+   astart:null,aend:null,remain:'45 days',
+   pred:'16',resource:'Pj-L',pct:0,critical:'いいえ',active:'はい',isSummary:true},
+  {id:24,wbs:'1.4.1',level:3,name:'技術文書作成（DHF整備）',note:'設計履歴ファイルの整備',duration:'18 days',
+   start:'2026-09-28',end:'2026-10-23',bstart:'2026-09-28',bend:'2026-10-23',
+   astart:null,aend:null,remain:'18 days',
+   pred:'21,22',resource:'RA, EL',pct:0,critical:'はい',active:'はい',isSummary:false},
+  {id:25,wbs:'1.4.2',level:3,name:'薬事申請書類作成',note:'',duration:'14 days',
+   start:'2026-10-26',end:'2026-11-14',bstart:'2026-10-26',bend:'2026-11-14',
+   astart:null,aend:null,remain:'14 days',
+   pred:'24',resource:'RA',pct:0,critical:'はい',active:'はい',isSummary:false},
+  {id:26,wbs:'1.4.3',level:3,name:'治験計画書作成',note:'',duration:'18 days',
+   start:'2026-10-05',end:'2026-10-30',bstart:'2026-10-05',bend:'2026-10-30',
+   astart:null,aend:null,remain:'18 days',
+   pred:'22',resource:'PDA',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  {id:27,wbs:'1.4.4',level:3,name:'薬事申請（マイルストーン）',note:'承認申請書を提出',duration:'0 days',
+   start:'2026-11-17',end:'2026-11-17',bstart:'2026-11-17',bend:'2026-11-17',
+   astart:null,aend:null,remain:'0 days',
+   pred:'25',resource:'RA',pct:0,critical:'はい',active:'はい',isSummary:false},
+  // ── フェーズ5：量産準備 ──
+  {id:28,wbs:'1.5',level:2,name:'量産準備フェーズ',note:'',duration:'',
+   start:'2026-11-02',end:'2026-12-25',bstart:'2026-11-02',bend:'2026-12-25',
+   astart:null,aend:null,remain:'40 days',
+   pred:'16',resource:'Pj-L',pct:0,critical:'いいえ',active:'はい',isSummary:true},
+  {id:29,wbs:'1.5.1',level:3,name:'量産設計移管',note:'試作→量産への設計仕様移管',duration:'14 days',
+   start:'2026-11-02',end:'2026-11-20',bstart:'2026-11-02',bend:'2026-11-20',
+   astart:null,aend:null,remain:'14 days',
+   pred:'21',resource:'EL, 工場',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  {id:30,wbs:'1.5.2',level:3,name:'製造手順書・QC基準作成',note:'',duration:'14 days',
+   start:'2026-11-23',end:'2026-12-11',bstart:'2026-11-23',bend:'2026-12-11',
+   astart:null,aend:null,remain:'14 days',
+   pred:'29',resource:'工場',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  {id:31,wbs:'1.5.3',level:3,name:'保守・サービス計画書作成',note:'',duration:'14 days',
+   start:'2026-11-09',end:'2026-11-27',bstart:'2026-11-09',bend:'2026-11-27',
+   astart:null,aend:null,remain:'14 days',
+   pred:'21',resource:'Service',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+  {id:32,wbs:'1.5.4',level:3,name:'販売促進・市場導入計画',note:'',duration:'36 days',
+   start:'2026-11-09',end:'2026-12-25',bstart:'2026-11-09',bend:'2026-12-25',
+   astart:null,aend:null,remain:'36 days',
+   pred:'5',resource:'Market, PRM',pct:0,critical:'いいえ',active:'はい',isSummary:false},
+];
+
+// =====================================================================
+// CONSTANTS
+// =====================================================================
+const DEPTS = ['Pj-L','RA','工場','EL','SW','VV','BRT','PRM','PDA','Service','Market','IP'];
+
+// =====================================================================
+// APP STATE
+// =====================================================================
+const state = {
+  tasks: [],
+  projectName: '医療機器開発PJ-A',
+  reportDate: '2026-05-18',
+  currentScreen: 'dashboard',
+  nwMode: 'cp',
+  nwSelectedId: null,
+  nwSubDepth: 2,
+  nwDeptFilter: 'all',
+  ganttWeeks: 13,
+  deptTab: 'Pj-L',
+  comments: {},
+  actions: [],
+  timelineItems: [],
+  collapsedRows: new Set(),
+};
+
+// =====================================================================
+// STORAGE MANAGER
+// =====================================================================
+function saveStorage() {
+  try {
+    localStorage.setItem('pj_settings', JSON.stringify({
+      projectName: state.projectName,
+      reportDate: state.reportDate,
+    }));
+    localStorage.setItem('pj_comments', JSON.stringify(state.comments));
+    localStorage.setItem('pj_actions', JSON.stringify(state.actions));
+    localStorage.setItem('pj_timeline_items', JSON.stringify(state.timelineItems));
+  } catch(e) { console.warn('Storage save failed', e); }
+}
+
+function loadStorage() {
+  try {
+    const s = JSON.parse(localStorage.getItem('pj_settings') || '{}');
+    if (s.projectName) state.projectName = s.projectName;
+    if (s.reportDate) state.reportDate = s.reportDate;
+    state.comments = JSON.parse(localStorage.getItem('pj_comments') || '{}');
+    state.actions = JSON.parse(localStorage.getItem('pj_actions') || '[]');
+    state.timelineItems = JSON.parse(localStorage.getItem('pj_timeline_items') || '[]');
+  } catch(e) { console.warn('Storage load failed', e); }
+}
+
+// =====================================================================
+// STATUS ENGINE (MSP計算式の完全再現)
+// =====================================================================
+function toDate(s) {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function daysBetween(a, b) {
+  if (!a || !b) return 0;
+  return Math.round((b - a) / 86400000);
+}
+
+function isZeroDays(remain) {
+  if (!remain) return false;
+  return remain.trim() === '0 days' || remain.trim() === '0 d' || remain.trim() === '0';
+}
+
+function calcStatus(task, allTasks, reportDate) {
+  const rd = toDate(reportDate);
+  if (!rd) return 'nActive';
+
+  if (task.active === 'いいえ') return 'Disable';
+
+  if (task.isSummary) {
+    const astart = toDate(task.astart);
+    const bstart = toDate(task.bstart);
+    if (!astart && bstart && rd < bstart) return 'nActive';
+    // Check children for Delay
+    const children = allTasks.filter(t => {
+      if (t.id === task.id) return false;
+      return t.wbs.startsWith(task.wbs + '.') && !t.wbs.slice(task.wbs.length + 1).includes('.');
+    });
+    const childStatuses = children.map(c => calcStatus(c, allTasks, reportDate));
+    if (childStatuses.some(s => s === 'Delay')) return 'Delay';
+    if (task.pct >= 100 && isZeroDays(task.remain)) return 'Close';
+    return 'On-going';
+  } else {
+    const bstart = toDate(task.bstart);
+    const bend = toDate(task.bend);
+    if (bstart && rd < bstart) return 'nActive';
+    if (task.pct >= 100) return 'Close';
+    if (bend && rd > bend) return 'Delay';
+    if (bstart && bend) {
+      const total = daysBetween(bstart, bend);
+      if (total > 0) {
+        const elapsed = daysBetween(bstart, rd);
+        const expected = Math.floor((elapsed / total) * 100);
+        if (task.pct >= expected) return 'On-going';
+        return 'Delay';
+      }
+    }
+    return 'On-going';
+  }
+}
+
+function computeAllStatuses() {
+  state.tasks.forEach(t => {
+    t.status = calcStatus(t, state.tasks, state.reportDate);
+  });
+}
+
+function statusBadge(s) {
+  const cls = {
+    'On-going':'s-ongoing','Delay':'s-delay','Close':'s-close',
+    'nActive':'s-nactive','Disable':'s-disable'
+  }[s] || 's-nactive';
+  return `<span class="badge ${cls}">${s}</span>`;
+}
+
+function pctBar(pct) {
+  return `<span class="pct-bar"><span class="pct-fill" style="width:${pct}%"></span></span>${pct}%`;
+}
+
+// =====================================================================
+// NAVIGATION
+// =====================================================================
+function navigate(screen) {
+  state.currentScreen = screen;
+  document.querySelectorAll('#sidebar-nav a').forEach(a => {
+    a.classList.toggle('active', a.dataset.screen === screen);
+  });
+  const titles = {
+    dashboard:'ダッシュボード', timeline:'大日程タイムライン',
+    nw:'NW図（タスク依存関係）', gantt:'ガントチャート（中・小日程）',
+    meeting:'定例ビュー', dept:'機能別進捗報告'
+  };
+  document.getElementById('topbar-title').textContent = titles[screen] || screen;
+  renderScreen();
+}
+
+function renderScreen() {
+  switch(state.currentScreen) {
+    case 'dashboard': renderDashboard(); break;
+    case 'timeline':  renderTimeline();  break;
+    case 'nw':        renderNW();        break;
+    case 'gantt':     renderGantt();     break;
+    case 'meeting':   renderMeeting();   break;
+    case 'dept':      renderDept();      break;
+  }
+}
+
+function jumpToNW(taskId) {
+  state.nwSelectedId = taskId;
+  state.nwMode = 'sub';
+  navigate('nw');
+}
+
+// =====================================================================
+// SETTINGS
+// =====================================================================
+function saveSettings() {
+  state.projectName = document.getElementById('input-pj-name').value || state.projectName;
+  state.reportDate  = document.getElementById('input-report-date').value || state.reportDate;
+  updateSidebarInfo();
+  saveStorage();
+  computeAllStatuses();
+  renderScreen();
+}
+
+function updateSidebarInfo() {
+  document.getElementById('sb-pj-name').textContent = state.projectName;
+  document.getElementById('sb-report-date').textContent = state.reportDate;
+  document.getElementById('input-pj-name').value = state.projectName;
+  document.getElementById('input-report-date').value = state.reportDate;
+}
+
+// =====================================================================
+// EXCEL IMPORT
+// =====================================================================
+document.getElementById('excel-file-input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {raw:false});
+      const colMap = {
+        'ID':'id','WBS_番号':'wbs','アウトライン_レベル':'level','タスク名':'name',
+        'Note':'note','期間':'duration','開始日':'start','終了日':'end',
+        '基準開始日':'bstart','基準終了日':'bend','実績開始日':'astart','実績終了日':'aend',
+        '残存期間':'remain','先行タスク':'pred','リソース名':'resource','達成率':'pct',
+        'クリティカル':'critical','アクティブ':'active','アウトラインフィールド':'isSummaryRaw'
+      };
+      state.tasks = rows.map((row, i) => {
+        const t = {};
+        Object.entries(colMap).forEach(([jp, en]) => {
+          t[en] = row[jp] !== undefined ? row[jp] : (en === 'isSummaryRaw' ? '' : null);
+        });
+        t.id = parseInt(t.id) || (i + 1);
+        t.level = parseInt(t.level) || 1;
+        t.pct = parseFloat(String(t.pct || '0').replace('%','')) || 0;
+        t.isSummary = t.isSummaryRaw === 'はい' || t.level === 1;
+        return t;
+      });
+      computeAllStatuses();
+      renderScreen();
+    } catch(err) {
+      alert('Excelの読み込みに失敗しました: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  this.value = '';
+});
+
+// =====================================================================
+// SCREEN 1: DASHBOARD
+// =====================================================================
+function renderDashboard() {
+  computeAllStatuses();
+  const tasks = state.tasks;
+  const regularTasks = tasks.filter(t => !t.isSummary && t.active === 'はい');
+  const rd = toDate(state.reportDate);
+  const rd14 = new Date(rd.getTime() + 14 * 86400000);
+
+  const counts = {ongoing:0, delay:0, close:0, nactive:0};
+  regularTasks.forEach(t => {
+    if (t.status === 'On-going') counts.ongoing++;
+    else if (t.status === 'Delay') counts.delay++;
+    else if (t.status === 'Close') counts.close++;
+    else if (t.status === 'nActive') counts.nactive++;
+  });
+
+  const delayTasks = regularTasks.filter(t => t.status === 'Delay');
+  const upcomingStart = regularTasks.filter(t => {
+    const bs = toDate(t.bstart);
+    return bs && bs > rd && bs <= rd14;
+  });
+  const upcomingEnd = regularTasks.filter(t => {
+    const be = toDate(t.bend);
+    return be && be >= rd && be <= rd14 && t.status !== 'Close';
+  });
+
+  // Dept summary
+  const deptRows = DEPTS.map(dept => {
+    const deptTasks = regularTasks.filter(t => (t.resource || '').includes(dept));
+    const dc = {ongoing:0,delay:0,close:0,nactive:0};
+    deptTasks.forEach(t => {
+      if (t.status === 'On-going') dc.ongoing++;
+      else if (t.status === 'Delay') dc.delay++;
+      else if (t.status === 'Close') dc.close++;
+      else if (t.status === 'nActive') dc.nactive++;
+    });
+    return {dept, ...dc, total: deptTasks.length};
+  }).filter(r => r.total > 0);
+
+  const html = `
+  <div class="kpi-grid">
+    <div class="kpi-card ongoing">
+      <div class="kpi-label">On-going（進行中）</div>
+      <div class="kpi-val">${counts.ongoing}</div>
+    </div>
+    <div class="kpi-card delay">
+      <div class="kpi-label">Delay（遅延）</div>
+      <div class="kpi-val">${counts.delay}</div>
+    </div>
+    <div class="kpi-card close">
+      <div class="kpi-label">Close（完了）</div>
+      <div class="kpi-val">${counts.close}</div>
+    </div>
+    <div class="kpi-card nactive">
+      <div class="kpi-label">nActive（未着手）</div>
+      <div class="kpi-val">${counts.nactive}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>🔴 遅延タスク一覧（${delayTasks.length}件）</h2>
+    ${delayTasks.length === 0 ? '<p class="text-muted">遅延タスクはありません</p>' :
+    `<table>
+      <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>達成率</th><th>CP</th><th>NW</th></tr></thead>
+      <tbody>${delayTasks.map(t => `
+        <tr>
+          <td style="white-space:nowrap;color:#888;font-size:11px">${t.wbs}</td>
+          <td>${t.name}</td>
+          <td><span class="text-muted">${t.resource||''}</span></td>
+          <td style="white-space:nowrap">${t.bend||'—'}</td>
+          <td>${pctBar(t.pct)}</td>
+          <td>${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+          <td><span class="nw-icon" onclick="jumpToNW(${t.id})" title="NW図で表示">🔗</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="section">
+      <h2>🟡 今後2週間以内に開始（${upcomingStart.length}件）</h2>
+      ${upcomingStart.length === 0 ? '<p class="text-muted">該当タスクなし</p>' :
+      `<table>
+        <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準開始日</th><th>ステータス</th></tr></thead>
+        <tbody>${upcomingStart.map(t => `
+          <tr>
+            <td style="font-size:11px;color:#888">${t.wbs}</td>
+            <td>${t.name}</td>
+            <td class="text-muted">${t.resource||''}</td>
+            <td style="white-space:nowrap">${t.bstart||'—'}</td>
+            <td>${statusBadge(t.status)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>
+    <div class="section">
+      <h2>🟢 今後2週間以内に完了予定（${upcomingEnd.length}件）</h2>
+      ${upcomingEnd.length === 0 ? '<p class="text-muted">該当タスクなし</p>' :
+      `<table>
+        <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>達成率</th></tr></thead>
+        <tbody>${upcomingEnd.map(t => `
+          <tr>
+            <td style="font-size:11px;color:#888">${t.wbs}</td>
+            <td>${t.name}</td>
+            <td class="text-muted">${t.resource||''}</td>
+            <td style="white-space:nowrap">${t.bend||'—'}</td>
+            <td>${pctBar(t.pct)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`}
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>機能部門別ステータス集計</h2>
+    <table>
+      <thead><tr><th>部門</th><th>On-going</th><th>Delay</th><th>Close</th><th>nActive</th><th>合計</th></tr></thead>
+      <tbody>${deptRows.map(r => `
+        <tr>
+          <td><strong>${r.dept}</strong></td>
+          <td style="color:#00B050;font-weight:600">${r.ongoing}</td>
+          <td style="color:#FF0000;font-weight:600">${r.delay}</td>
+          <td style="color:#0070C0;font-weight:600">${r.close}</td>
+          <td style="color:#808080;font-weight:600">${r.nactive}</td>
+          <td><strong>${r.total}</strong></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+
+  document.getElementById('content').innerHTML = html;
+}
+
+// =====================================================================
+// SCREEN 2: TIMELINE
+// =====================================================================
+function renderTimeline() {
+  const months6 = 6, months12 = 12, months18 = 18;
+  let showMonths = state.tlMonths || 12;
+
+  document.getElementById('content').innerHTML = `
+    <div class="section" style="margin-bottom:10px">
+      <div class="tl-controls">
+        <span style="font-size:12px;color:#666">表示期間:</span>
+        ${[6,12,18].map(m => `<button class="btn btn-sm ${showMonths===m?'btn-primary':'btn-outline'}" onclick="setTLMonths(${m})">${m}ヶ月</button>`).join('')}
+        <span style="flex:1"></span>
+        <button class="btn btn-sm btn-secondary" onclick="openModal('tl-item-modal')">＋ アイテム追加</button>
+      </div>
+      <div style="font-size:11px;color:#888">
+        <span style="display:inline-block;width:14px;height:8px;background:#4472C4;border-radius:2px;vertical-align:middle;margin-right:4px;opacity:.8"></span>基準計画バー
+        <span style="display:inline-block;width:14px;height:8px;background:#FFC000;border-radius:2px;vertical-align:middle;margin-right:4px;opacity:.8"></span>予測バー
+        <span style="display:inline-block;width:12px;height:12px;background:#e53935;transform:rotate(45deg);vertical-align:middle;margin-right:4px"></span>マイルストーン
+        <span style="display:inline-block;width:2px;height:14px;background:orange;vertical-align:middle;margin-right:4px"></span>TODAY
+      </div>
+    </div>
+    <div class="section" style="padding:12px">
+      <div id="tl-wrap" style="overflow-x:auto"></div>
+    </div>`;
+
+  drawTimeline(showMonths);
+}
+
+window.setTLMonths = function(m) {
+  state.tlMonths = m;
+  renderTimeline();
+};
+
+function drawTimeline(showMonths) {
+  const wrap = document.getElementById('tl-wrap');
+  if (!wrap) return;
+
+  const rd = toDate(state.reportDate);
+  const startDate = new Date(rd.getFullYear(), rd.getMonth() - 2, 1);
+  const endDate   = new Date(startDate.getFullYear(), startDate.getMonth() + showMonths, 1);
+
+  // Tasks to show: level 1,2 summaries + milestones + manual items
+  const tlTasks = state.tasks.filter(t => (t.level <= 2 || t.duration === '0 days') && t.active !== 'いいえ');
+  const manualItems = state.timelineItems;
+
+  const allRows = [
+    ...tlTasks.map(t => ({
+      name: t.name,
+      bstart: toDate(t.bstart), bend: toDate(t.bend),
+      fstart: toDate(t.start),  fend:  toDate(t.end),
+      isMilestone: t.duration === '0 days',
+      status: t.status,
+      level: t.level,
+      source: 'auto',
+      color: null,
+    })),
+    ...manualItems.map(m => ({
+      name: m.name,
+      bstart: toDate(m.date || m.start), bend: toDate(m.end || m.date),
+      fstart: null, fend: null,
+      isMilestone: m.type === 'milestone',
+      status: null,
+      level: 3,
+      source: 'manual',
+      color: m.color,
+    })),
+  ].filter(r => {
+    const s = r.bstart, e = r.bend;
+    return s && (e >= startDate || s <= endDate);
+  });
+
+  const W = Math.max(wrap.clientWidth - 8, 600);
+  const marginL = 180, marginR = 10, marginT = 48, marginB = 20;
+  const innerW = W - marginL - marginR;
+  const rowH = 34;
+  const H = marginT + allRows.length * rowH + marginB + 24;
+
+  const svg = d3.select('#tl-wrap').selectAll('svg').data([1]).join('svg')
+    .attr('width', W).attr('height', H);
+  svg.selectAll('*').remove();
+
+  const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, innerW]);
+  const g = svg.append('g').attr('transform', `translate(${marginL},${marginT})`);
+
+  // Month gridlines + header
+  const months = d3.timeMonths(startDate, endDate);
+  months.forEach(m => {
+    const x = xScale(m);
+    g.append('line').attr('x1', x).attr('x2', x).attr('y1', -28).attr('y2', allRows.length * rowH)
+      .attr('stroke', '#e0e0e0').attr('stroke-width', 1);
+    g.append('text').attr('x', x + 4).attr('y', -14)
+      .attr('font-size', '10px').attr('fill', '#666')
+      .text(d3.timeFormat('%Y/%m')(m));
+  });
+
+  // TODAY line
+  const tx = xScale(rd);
+  if (tx >= 0 && tx <= innerW) {
+    g.append('line').attr('x1', tx).attr('x2', tx).attr('y1', -28).attr('y2', allRows.length * rowH)
+      .attr('stroke', 'orange').attr('stroke-width', 2).attr('stroke-dasharray', '4,3');
+    g.append('text').attr('x', tx + 2).attr('y', -32)
+      .attr('font-size', '10px').attr('fill', 'orange').text('TODAY');
+  }
+
+  // Rows
+  allRows.forEach((row, i) => {
+    const y = i * rowH;
+    const rowG = g.append('g').attr('transform', `translate(0,${y})`);
+
+    // Row background (alternating)
+    rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', innerW).attr('height', rowH)
+      .attr('fill', i % 2 === 0 ? '#fafbff' : '#fff').attr('opacity', .5);
+
+    // Task name
+    const indent = row.level === 1 ? 0 : row.level === 2 ? 10 : 18;
+    const label = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
+    g.append('text').attr('x', -marginL + indent).attr('y', y + rowH / 2 + 4)
+      .attr('font-size', row.level === 1 ? '12px' : row.level === 2 ? '11px' : '11px')
+      .attr('font-weight', row.level <= 2 ? '600' : '400')
+      .attr('fill', '#333')
+      .text((row.source === 'manual' ? '✏ ' : '') + label);
+
+    if (row.isMilestone) {
+      const mx = xScale(row.bstart);
+      if (mx >= 0 && mx <= innerW) {
+        const color = row.color || '#e53935';
+        const d = 8;
+        const diamond = `M${mx},${rowH/2-d} L${mx+d},${rowH/2} L${mx},${rowH/2+d} L${mx-d},${rowH/2} Z`;
+        rowG.append('path').attr('d', diamond).attr('fill', color).attr('stroke', color);
+        rowG.append('text').attr('x', mx + d + 4).attr('y', rowH / 2 + 4)
+          .attr('font-size', '10px').attr('fill', color).attr('font-weight', '600')
+          .text(row.name);
+      }
+    } else {
+      // Base plan bar
+      if (row.bstart && row.bend) {
+        const x1 = Math.max(0, xScale(row.bstart));
+        const x2 = Math.min(innerW, xScale(row.bend));
+        if (x2 > x1) {
+          const barH = row.level <= 2 ? 14 : 10;
+          const barY = (rowH - barH) / 2;
+          const color = row.color || (row.level <= 2 ? '#4472C4' : '#4472C4');
+          rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
+            .attr('fill', color).attr('opacity', row.level <= 2 ? .85 : .7).attr('rx', 2)
+            .on('mouseover', (e) => showTooltip(e, `${row.name}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}`))
+            .on('mouseout', hideTooltip);
+        }
+      }
+      // Forecast bar (if differs from baseline)
+      if (row.fstart && row.fend) {
+        const bs = row.bstart?.getTime(), be = row.bend?.getTime();
+        const fs = row.fstart?.getTime(), fe = row.fend?.getTime();
+        if (bs !== fs || be !== fe) {
+          const x1 = Math.max(0, xScale(row.fstart));
+          const x2 = Math.min(innerW, xScale(row.fend));
+          if (x2 > x1) {
+            const barH = row.level <= 2 ? 8 : 6;
+            const barY = (rowH - barH) / 2 + (row.level <= 2 ? 3 : 2);
+            rowG.append('rect').attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
+              .attr('fill', '#FFC000').attr('opacity', .75).attr('rx', 2)
+              .on('mouseover', (e) => showTooltip(e, `${row.name}<br>予測: ${row.fstart?.toLocaleDateString('ja-JP')} 〜 ${row.fend?.toLocaleDateString('ja-JP')}`))
+              .on('mouseout', hideTooltip);
+          }
+        }
+      }
+    }
+  });
+
+  // Manual items delete buttons (right side)
+  if (manualItems.length > 0) {
+    const startIdx = tlTasks.length;
+    manualItems.forEach((item, i) => {
+      const y = (startIdx + i) * rowH + rowH / 2 - 8;
+      svg.append('text').attr('x', W - marginR - 16).attr('y', marginT + y + 10)
+        .attr('font-size', '12px').attr('fill', '#e53935').attr('cursor', 'pointer')
+        .text('✕').on('click', () => { state.timelineItems.splice(i, 1); saveStorage(); renderTimeline(); });
+    });
+  }
+}
+
+// Timeline item modal
+window.addTimelineItem = function() {
+  const name = document.getElementById('tl-name').value.trim();
+  const type = document.getElementById('tl-type').value;
+  const start = document.getElementById('tl-start').value;
+  const end = document.getElementById('tl-end').value;
+  const color = document.getElementById('tl-color').value;
+  if (!name || !start) { alert('表示名と日付を入力してください'); return; }
+  state.timelineItems.push({
+    id: 'tl_' + Date.now(),
+    type, name,
+    date: type === 'milestone' ? start : undefined,
+    start: type === 'phase' ? start : undefined,
+    end: type === 'phase' ? end : undefined,
+    color, source: 'manual'
+  });
+  saveStorage();
+  closeModal('tl-item-modal');
+  renderTimeline();
+};
+
+document.getElementById('tl-type').addEventListener('change', function() {
+  const isMS = this.value === 'milestone';
+  document.getElementById('tl-date-row1').querySelector('label').textContent = isMS ? '日付' : '開始日';
+  document.getElementById('tl-date-row2').style.display = isMS ? 'none' : '';
+});
+
+// =====================================================================
+// SCREEN 3: NW GRAPH
+// =====================================================================
+function buildGraph(tasks) {
+  const nodes = tasks.map(t => ({...t}));
+  const idSet = new Set(nodes.map(n => n.id));
+  const edges = [];
+  nodes.forEach(n => {
+    if (!n.pred) return;
+    n.pred.split(',').map(s => parseInt(s.trim())).filter(pid => idSet.has(pid)).forEach(pid => {
+      edges.push({source: pid, target: n.id});
+    });
+  });
+  return {nodes, edges};
+}
+
+function computeLayout(nodes, edges) {
+  if (nodes.length === 0) return;
+  const idSet = new Set(nodes.map(n => n.id));
+  const succs = {}, inDeg = {};
+  nodes.forEach(n => { succs[n.id] = []; inDeg[n.id] = 0; });
+  edges.forEach(e => {
+    if (idSet.has(e.source) && idSet.has(e.target)) {
+      succs[e.source].push(e.target);
+      inDeg[e.target]++;
+    }
+  });
+  const depth = {};
+  const queue = nodes.filter(n => inDeg[n.id] === 0).map(n => n.id);
+  queue.forEach(id => { depth[id] = 0; });
+  const visited = new Set(queue);
+  while (queue.length > 0) {
+    const id = queue.shift();
+    succs[id].forEach(sid => {
+      depth[sid] = Math.max(depth[sid] || 0, (depth[id] || 0) + 1);
+      inDeg[sid]--;
+      if (inDeg[sid] === 0 && !visited.has(sid)) { queue.push(sid); visited.add(sid); }
+    });
+  }
+  const byDepth = {};
+  nodes.forEach(n => {
+    const d = depth[n.id] || 0;
+    if (!byDepth[d]) byDepth[d] = [];
+    byDepth[d].push(n);
+  });
+  const NW = 190, NH = 72, CGAP = 60, RGAP = 14;
+  nodes.forEach(n => {
+    const d = depth[n.id] || 0;
+    const col = byDepth[d];
+    const idx = col.indexOf(n);
+    const colH = col.length * (NH + RGAP) - RGAP;
+    n.gx = d * (NW + CGAP);
+    n.gy = idx * (NH + RGAP);
+    n._colH = colH;
+    n._depth = d;
+  });
+  // Center columns vertically
+  const colHeights = {};
+  Object.entries(byDepth).forEach(([d, col]) => {
+    colHeights[d] = col.length * (NH + RGAP) - RGAP;
+  });
+  const maxH = Math.max(...Object.values(colHeights));
+  nodes.forEach(n => {
+    n.gy += (maxH - (colHeights[n._depth] || 0)) / 2;
+  });
+}
+
+function renderNW() {
+  const tasks = state.tasks;
+  const regularTasks = tasks.filter(t => !t.isSummary && t.active !== 'いいえ');
+
+  let modeTasks;
+  if (state.nwMode === 'cp') {
+    modeTasks = regularTasks.filter(t => t.critical === 'はい');
+  } else if (state.nwMode === 'sub' && state.nwSelectedId) {
+    const depth = state.nwSubDepth || 2;
+    const selected = new Set([state.nwSelectedId]);
+    const allEdges = [];
+    regularTasks.forEach(t => {
+      if (!t.pred) return;
+      t.pred.split(',').map(s => parseInt(s.trim())).forEach(pid => {
+        allEdges.push({source: pid, target: t.id});
+      });
+    });
+    for (let i = 0; i < depth; i++) {
+      const toAdd = new Set();
+      allEdges.forEach(e => {
+        if (selected.has(e.source)) toAdd.add(e.target);
+        if (selected.has(e.target)) toAdd.add(e.source);
+      });
+      toAdd.forEach(id => selected.add(id));
+    }
+    modeTasks = regularTasks.filter(t => selected.has(t.id));
+  } else {
+    modeTasks = regularTasks.slice();
+  }
+
+  // Dept filter
+  if (state.nwDeptFilter && state.nwDeptFilter !== 'all') {
+    modeTasks = modeTasks.filter(t => (t.resource || '').includes(state.nwDeptFilter));
+  }
+
+  const {nodes, edges} = buildGraph(modeTasks);
+  computeLayout(nodes, edges);
+
+  const NW = 190, NH = 72;
+  const maxX = nodes.length ? Math.max(...nodes.map(n => n.gx)) + NW + 40 : 400;
+  const maxY = nodes.length ? Math.max(...nodes.map(n => n.gy)) + NH + 40 : 300;
+  const CANVAS_W = Math.max(maxX + 60, 600);
+  const CANVAS_H = Math.max(maxY + 60, 400);
+
+  const deptOptions = ['all', ...DEPTS].map(d =>
+    `<option value="${d}" ${state.nwDeptFilter === d ? 'selected' : ''}>${d === 'all' ? '全部門' : d}</option>`
+  ).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="nw-controls" style="margin-bottom:10px">
+      <button class="btn btn-sm ${state.nwMode==='cp'?'btn-primary':'btn-outline'}" onclick="setNWMode('cp')">CPモード</button>
+      <button class="btn btn-sm ${state.nwMode==='all'?'btn-primary':'btn-outline'}" onclick="setNWMode('all')">全体モード</button>
+      <button class="btn btn-sm ${state.nwMode==='sub'?'btn-primary':'btn-outline'}" onclick="setNWMode('sub')">サブグラフ</button>
+      ${state.nwMode==='sub'?`<label style="font-size:11px">深さ: <input type="number" min="1" max="5" value="${state.nwSubDepth}" style="width:44px;border:1px solid #ccc;border-radius:4px;padding:2px 4px" onchange="state.nwSubDepth=+this.value;renderNW()"></label>`:''}
+      <select style="border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-size:11px" onchange="state.nwDeptFilter=this.value;renderNW()">${deptOptions}</select>
+      <button class="btn btn-sm btn-outline" onclick="resetNWZoom()">ズームリセット</button>
+      <span class="text-muted">${nodes.length}ノード表示中</span>
+    </div>
+    <div id="nw-wrap">
+      <div id="nw-svg-container" style="height:560px">
+        <svg id="nw-svg"></svg>
+      </div>
+      <div id="nw-panel">
+        <h3>タスク詳細</h3>
+        <div id="nw-detail"><p class="text-muted" style="font-size:11px">ノードをクリックして詳細を表示</p></div>
+      </div>
+    </div>`;
+
+  const svgEl = document.getElementById('nw-svg');
+  const containerEl = document.getElementById('nw-svg-container');
+  const cW = containerEl.clientWidth;
+  const cH = containerEl.clientHeight;
+
+  const svg = d3.select('#nw-svg').attr('width', cW).attr('height', cH);
+  svg.selectAll('*').remove();
+
+  const defs = svg.append('defs');
+  // Arrow markers
+  ['normal','cp'].forEach(type => {
+    defs.append('marker').attr('id', `arrow-${type}`)
+      .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
+      .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', type === 'cp' ? '#e53935' : '#4472C4');
+  });
+
+  const g = svg.append('g').attr('id', 'nw-g');
+
+  // Edges
+  const nodeMap = {};
+  nodes.forEach(n => nodeMap[n.id] = n);
+  edges.forEach(e => {
+    const src = nodeMap[e.source], tgt = nodeMap[e.target];
+    if (!src || !tgt) return;
+    const isCP = src.critical === 'はい' && tgt.critical === 'はい';
+    const sx = src.gx + NW, sy = src.gy + NH / 2;
+    const tx = tgt.gx, ty = tgt.gy + NH / 2;
+    const cx = (sx + tx) / 2;
+    g.append('path')
+      .attr('d', `M${sx},${sy} C${cx},${sy} ${cx},${ty} ${tx},${ty}`)
+      .attr('fill', 'none')
+      .attr('stroke', isCP ? '#e53935' : '#4472C4')
+      .attr('stroke-width', isCP ? 2.5 : 1.5)
+      .attr('marker-end', `url(#arrow-${isCP ? 'cp' : 'normal'})`)
+      .attr('opacity', .8);
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    const statusBgColor = {
+      'On-going': '#E2EFDA', 'Delay': '#FFE0E0',
+      'Close': '#DDEEFF', 'nActive': '#F2F2F2', 'Disable': '#F2F2F2'
+    }[n.status] || '#fff';
+    const statusBorderColor = {
+      'On-going': '#00B050', 'Delay': '#FF0000',
+      'Close': '#0070C0', 'nActive': '#808080', 'Disable': '#BFBFBF'
+    }[n.status] || '#ccc';
+    const isCP = n.critical === 'はい';
+    const isSelected = n.id === state.nwSelectedId;
+
+    const ng = g.append('g').attr('class', 'nw-node')
+      .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
+      .style('cursor', 'pointer')
+      .on('click', () => selectNWNode(n.id));
+
+    ng.append('rect')
+      .attr('width', NW).attr('height', NH)
+      .attr('rx', 5)
+      .attr('fill', statusBgColor)
+      .attr('stroke', isSelected ? '#333' : isCP ? '#e53935' : statusBorderColor)
+      .attr('stroke-width', isSelected ? 3 : isCP ? 2.5 : 1.5);
+
+    // CP badge
+    if (isCP) {
+      ng.append('rect').attr('x', NW - 28).attr('y', 0).attr('width', 22).attr('height', 14)
+        .attr('rx', 2).attr('fill', '#e53935');
+      ng.append('text').attr('x', NW - 17).attr('y', 10).attr('text-anchor', 'middle')
+        .attr('font-size', '9px').attr('fill', '#fff').attr('font-weight', '700').text('CP');
+    }
+
+    // WBS number
+    ng.append('text').attr('x', 8).attr('y', 14)
+      .attr('font-size', '9px').attr('fill', '#888').text(n.wbs);
+
+    // Task name (wrap at ~22 chars)
+    const name = n.name;
+    const line1 = name.slice(0, 22);
+    const line2 = name.length > 22 ? name.slice(22, 42) + (name.length > 42 ? '…' : '') : '';
+    ng.append('text').attr('x', NW / 2).attr('y', line2 ? 30 : 36)
+      .attr('text-anchor', 'middle').attr('font-size', '11px').attr('font-weight', '600')
+      .attr('fill', '#222').text(line1);
+    if (line2) {
+      ng.append('text').attr('x', NW / 2).attr('y', 44)
+        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', '#222').text(line2);
+    }
+
+    // Status + pct
+    ng.append('text').attr('x', NW / 2).attr('y', NH - 6)
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#555')
+      .text(`${n.status} | ${n.pct}%`);
+
+    ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>WBS: ${n.wbs}<br>担当: ${n.resource||'—'}<br>達成率: ${n.pct}%`))
+      .on('mouseout', hideTooltip);
+  });
+
+  // Zoom/pan
+  const zoom = d3.zoom()
+    .scaleExtent([0.2, 3])
+    .on('zoom', (event) => { g.attr('transform', event.transform); });
+  svg.call(zoom);
+
+  // Initial transform to center content
+  if (nodes.length > 0) {
+    const initScale = Math.min(1, (cW - 40) / (CANVAS_W + 40), (cH - 40) / (CANVAS_H + 40));
+    svg.call(zoom.transform, d3.zoomIdentity.translate(20, 20).scale(initScale));
+  }
+  state._nwZoom = zoom;
+  state._nwSvg = svg;
+}
+
+window.setNWMode = function(mode) { state.nwMode = mode; renderNW(); };
+window.resetNWZoom = function() {
+  if (state._nwSvg && state._nwZoom) {
+    state._nwSvg.transition().duration(400).call(state._nwZoom.transform, d3.zoomIdentity.translate(20, 20));
+  }
+};
+
+function selectNWNode(id) {
+  state.nwSelectedId = id;
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  const weekKey = getWeekKey(state.reportDate);
+  const commentKey = `${id}_${weekKey}`;
+  const existingComment = state.comments[commentKey];
+  document.getElementById('nw-detail').innerHTML = `
+    <div class="nw-detail-row"><div class="nw-detail-label">タスク名</div><div class="nw-detail-val" style="font-weight:700">${task.name}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">WBS番号</div><div class="nw-detail-val">${task.wbs}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">担当部門</div><div class="nw-detail-val">${task.resource||'—'}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">基準開始日</div><div class="nw-detail-val">${task.bstart||'—'}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">基準終了日</div><div class="nw-detail-val">${task.bend||'—'}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">達成率</div><div class="nw-detail-val">${pctBar(task.pct)}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">ステータス</div><div class="nw-detail-val">${statusBadge(task.status)}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">CP</div><div class="nw-detail-val">${task.critical==='はい'?'<span class="cp-badge">CP</span>':'—'}</div></div>
+    <div class="nw-detail-row"><div class="nw-detail-label">Note</div><div class="nw-detail-val">${task.note||'—'}</div></div>
+    <hr style="margin:10px 0;border-color:#eee">
+    <div style="margin-top:8px">
+      <button class="btn btn-secondary btn-sm" onclick="state.nwMode='sub';state.nwSubDepth=2;renderNW()">周辺NWを表示</button>
+    </div>`;
+  // Highlight selected node
+  renderNW();
+}
+
+// =====================================================================
+// SCREEN 4: GANTT CHART
+// =====================================================================
+function renderGantt() {
+  const weekOptions = [2, 4, 13, 26, 52];
+  document.getElementById('content').innerHTML = `
+    <div class="section" style="padding:0">
+      <div class="gantt-controls">
+        <span style="font-size:12px;color:#666">表示週数:</span>
+        ${weekOptions.map(w => `<button class="btn btn-sm ${state.ganttWeeks===w?'btn-primary':'btn-outline'}" onclick="setGanttWeeks(${w})">${w}週</button>`).join('')}
+        <span style="flex:1"></span>
+        <span style="font-size:11px;color:#888">
+          <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
+          <span style="display:inline-block;width:12px;height:6px;background:#70AD47;border-radius:1px;opacity:.9;vertical-align:middle;margin-right:3px"></span>実績
+        </span>
+      </div>
+      <div id="gantt-wrap"></div>
+    </div>`;
+  drawGantt();
+}
+
+window.setGanttWeeks = function(w) { state.ganttWeeks = w; renderGantt(); };
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getWeekKey(dateStr) {
+  const d = toDate(dateStr);
+  if (!d) return '';
+  const start = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayOfWeek = start.getUTCDay() || 7;
+  start.setUTCDate(start.getUTCDate() + 4 - dayOfWeek);
+  const yearStart = new Date(Date.UTC(start.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((start - yearStart) / 86400000) + 1) / 7);
+  return `${start.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+}
+
+function drawGantt() {
+  const wrap = document.getElementById('gantt-wrap');
+  if (!wrap) return;
+  const rd = toDate(state.reportDate);
+  const monday = getMonday(rd);
+  const weeks = state.ganttWeeks;
+  const startWeek = new Date(monday.getTime() - Math.floor(weeks * 0.3) * 7 * 86400000);
+
+  // Generate week headers
+  const weekDates = [];
+  for (let i = 0; i < weeks; i++) {
+    const w = new Date(startWeek.getTime() + i * 7 * 86400000);
+    weekDates.push(w);
+  }
+
+  // Group weeks by month for header
+  const monthGroups = [];
+  let curMonth = null, curStart = 0;
+  weekDates.forEach((w, i) => {
+    const m = `${w.getFullYear()}/${String(w.getMonth() + 1).padStart(2,'0')}`;
+    if (m !== curMonth) {
+      if (curMonth !== null) monthGroups.push({label: curMonth, count: i - curStart});
+      curMonth = m;
+      curStart = i;
+    }
+  });
+  if (curMonth) monthGroups.push({label: curMonth, count: weekDates.length - curStart});
+
+  // Fixed columns
+  const fixedCols = [
+    {key:'wbs',label:'WBS',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当',w:80},
+    {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW',w:28}
+  ];
+
+  // Visible tasks (apply collapse)
+  const visibleTasks = [];
+  const hiddenParents = new Set();
+  state.tasks.forEach(t => {
+    // Check if any parent is collapsed
+    const parentWbs = t.wbs.split('.').slice(0, -1).join('.');
+    const isHidden = [...hiddenParents].some(hw => t.wbs.startsWith(hw + '.'));
+    if (!isHidden) {
+      visibleTasks.push(t);
+      if (t.isSummary && state.collapsedRows.has(t.id)) {
+        hiddenParents.add(t.wbs);
+      }
+    }
+  });
+
+  let html = '<table class="gantt-table"><thead>';
+  // Month row
+  html += '<tr>';
+  fixedCols.forEach(c => html += `<th class="gt-cell" style="width:${c.w}px;min-width:${c.w}px" rowspan="2"></th>`);
+  monthGroups.forEach(mg => html += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
+  html += '</tr>';
+  // Week row
+  html += '<tr>';
+  weekDates.forEach(w => {
+    const isToday = w <= rd && new Date(w.getTime() + 6 * 86400000) >= rd;
+    html += `<th class="gt-header${isToday?' today-col':''}" style="min-width:22px;width:22px">${w.getDate()}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  visibleTasks.forEach(task => {
+    const isCP = task.critical === 'はい' && !task.isSummary;
+    const isSummary = task.isSummary;
+    const isCollapsed = state.collapsedRows.has(task.id);
+    const indent = task.level === 1 ? 'il1' : task.level === 2 ? 'il2' : task.level === 3 ? 'il3' : 'il4';
+    const rowBg = isSummary ? 'background:#f5f7fa' : '';
+
+    html += `<tr class="${isCP ? 'cp-row' : ''}" style="${rowBg}">`;
+    fixedCols.forEach(c => {
+      let val = '';
+      if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
+      else if (c.key === 'name') {
+        const toggle = isSummary ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>` : '<span style="display:inline-block;width:18px"></span>';
+        val = `<div class="${indent}" style="white-space:nowrap;overflow:hidden;max-width:180px;text-overflow:ellipsis">${toggle}${task.name}</div>`;
+      }
+      else if (c.key === 'resource') val = `<span style="font-size:10px;color:#888">${task.resource||''}</span>`;
+      else if (c.key === 'pct') val = `${pctBar(task.pct)}`;
+      else if (c.key === 'status') val = statusBadge(task.status);
+      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="jumpToNW(${task.id})">🔗</span>`;
+      const stickyStyle = ['wbs','name','resource','pct','status','nw'].includes(c.key) ?
+        'position:sticky;left:0;z-index:1;' : '';
+      html += `<td class="gt-cell" style="${rowBg};${stickyStyle}min-width:${c.w}px">${val}</td>`;
+    });
+
+    const bstart = toDate(task.bstart), bend = toDate(task.bend);
+    const astart = toDate(task.astart), aend = toDate(task.aend);
+    const today = toDate(state.reportDate);
+
+    weekDates.forEach(w => {
+      const wEnd = new Date(w.getTime() + 6 * 86400000);
+      const isToday = w <= today && wEnd >= today;
+      const bg = isToday ? 'background:#FFF3E0;' : '';
+
+      // Check overlaps
+      const baseOverlap = bstart && bend && bstart <= wEnd && bend >= w;
+      const actualOverlap = astart && (aend || today) && astart <= wEnd && (aend || today) >= w;
+
+      let cellContent = '<div style="position:relative;height:22px">';
+      if (baseOverlap) {
+        // Calculate left% and width% within the week
+        const clampedStart = Math.max(bstart, w);
+        const clampedEnd = Math.min(bend, wEnd);
+        const weekMs = 7 * 86400000;
+        const leftPct = (clampedStart - w) / weekMs * 100;
+        const widPct = (clampedEnd - clampedStart) / weekMs * 100;
+        const color = isSummary ? '#2F5597' : '#4472C4';
+        cellContent += `<div class="gantt-bar-base" style="left:${leftPct}%;width:${widPct}%;background:${color}"></div>`;
+      }
+      if (actualOverlap) {
+        const effectiveEnd = aend || today;
+        const clampedStart = Math.max(astart, w);
+        const clampedEnd = Math.min(effectiveEnd, wEnd);
+        const weekMs = 7 * 86400000;
+        const leftPct = (clampedStart - w) / weekMs * 100;
+        const widPct = (clampedEnd - clampedStart) / weekMs * 100;
+        cellContent += `<div class="gantt-bar-actual" style="left:${leftPct}%;width:${widPct}%"></div>`;
+      }
+      cellContent += '</div>';
+      html += `<td class="gantt-bar-cell" style="${bg}">${cellContent}</td>`;
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+window.toggleGanttRow = function(id) {
+  if (state.collapsedRows.has(id)) state.collapsedRows.delete(id);
+  else state.collapsedRows.add(id);
+  drawGantt();
+};
+
+// =====================================================================
+// SCREEN 5: MEETING VIEW
+// =====================================================================
+function renderMeeting() {
+  computeAllStatuses();
+  const tasks = state.tasks;
+  const rd = toDate(state.reportDate);
+  const rd14 = new Date(rd.getTime() + 14 * 86400000);
+  const regularTasks = tasks.filter(t => !t.isSummary && t.active === 'はい');
+  const weekKey = getWeekKey(state.reportDate);
+
+  const sect1 = regularTasks.filter(t => t.status === 'Delay');
+  const sect2 = regularTasks.filter(t => {
+    const bs = toDate(t.bstart);
+    return t.status === 'nActive' && bs && bs <= rd14;
+  });
+  const sect3 = regularTasks.filter(t => {
+    const be = toDate(t.bend);
+    return t.status === 'On-going' && be && be <= rd14;
+  });
+  const sect4 = regularTasks.filter(t => t.critical === 'はい' && (t.status === 'On-going' || t.status === 'Delay'));
+
+  function sectionTable(sectionTasks, sectionId) {
+    if (sectionTasks.length === 0) return '<p class="text-muted" style="padding:8px 0">該当タスクなし</p>';
+    return `<table>
+      <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>予測終了日</th><th>達成率</th><th>ステータス</th><th>進捗コメント</th><th>期限</th></tr></thead>
+      <tbody>${sectionTasks.map(t => {
+        const ck = `${t.id}_${weekKey}`;
+        const c = state.comments[ck] || {};
+        const saved = !!c.comment;
+        return `<tr>
+          <td style="font-size:10px;color:#888;white-space:nowrap">${t.wbs}</td>
+          <td style="min-width:140px">${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+          <td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>
+          <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
+          <td style="white-space:nowrap;font-size:11px">${t.end||'—'}</td>
+          <td>${pctBar(t.pct)}</td>
+          <td>${statusBadge(t.status)}</td>
+          <td>
+            <textarea class="comment-input${saved?' saved':''}" id="mc_${t.id}"
+              onchange="saveMeetingComment(${t.id},'${weekKey}',this.value)"
+              placeholder="コメントを入力...">${c.comment||''}</textarea>
+          </td>
+          <td><input type="date" value="${c.deadline||''}" style="border:1px solid #ddd;border-radius:3px;padding:2px 4px;font-size:10px;width:110px"
+            onchange="saveCommentDeadline(${t.id},'${weekKey}',this.value)"></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  const actionsHtml = state.actions.length === 0 ? '<p class="text-muted">アクションなし</p>' :
+    `<div class="action-list">${state.actions.map((a, i) => `
+      <div class="action-item ${a.priority==='高'?'high':a.priority==='中'?'mid':'low'} ${a.done?'done-item':''}">
+        <input type="checkbox" ${a.done?'checked':''} onchange="toggleAction(${i},this.checked)" style="flex-shrink:0">
+        <div class="action-content">
+          <div>${a.content}</div>
+          <div class="action-meta">担当: ${a.owner||'—'} | 期限: ${a.deadline||'—'} | 優先度: ${a.priority} | 登録: ${a.createdAt?.slice(0,10)||''}</div>
+        </div>
+        <button class="btn btn-sm" style="background:#fef;border:1px solid #fcc;font-size:11px" onclick="deleteAction(${i})">削除</button>
+      </div>`).join('')}
+    </div>`;
+
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:12px;color:#666">定例日: <strong>${state.reportDate}</strong>　PJ: <strong>${state.projectName}</strong></div>
+      <button class="btn btn-primary btn-sm" onclick="window.print()">🖨 PDF出力（印刷）</button>
+    </div>
+
+    <div class="section mtg-section">
+      <div class="mtg-section-title mtg-delay">🔴 完了すべきだが未完了のタスク（Delay: ${sect1.length}件）</div>
+      ${sectionTable(sect1, 's1')}
+    </div>
+
+    <div class="section mtg-section">
+      <div class="mtg-section-title mtg-upcoming-start">🟡 今後2週間以内に開始すべきタスク（${sect2.length}件）</div>
+      ${sectionTable(sect2, 's2')}
+    </div>
+
+    <div class="section mtg-section">
+      <div class="mtg-section-title mtg-upcoming-end">🟢 今後2週間以内に完了予定のタスク（${sect3.length}件）</div>
+      ${sectionTable(sect3, 's3')}
+    </div>
+
+    <div class="section mtg-section">
+      <div class="mtg-section-title mtg-cp">🔴 クリティカルパス上の進行中タスク（${sect4.length}件）</div>
+      ${sectionTable(sect4, 's4')}
+    </div>
+
+    <div class="section">
+      <h2>📋 アクション一覧
+        <button class="btn btn-secondary btn-sm" onclick="openModal('action-modal')">＋ アクション追加</button>
+      </h2>
+      ${actionsHtml}
+    </div>`;
+}
+
+window.saveMeetingComment = function(taskId, weekKey, comment) {
+  const ck = `${taskId}_${weekKey}`;
+  if (!state.comments[ck]) state.comments[ck] = {taskId, weekKey};
+  state.comments[ck].comment = comment;
+  state.comments[ck].savedAt = new Date().toISOString();
+  state.comments[ck].screen = 'meeting';
+  saveStorage();
+  const el = document.getElementById(`mc_${taskId}`);
+  if (el) el.classList.toggle('saved', !!comment);
+};
+
+window.saveCommentDeadline = function(taskId, weekKey, deadline) {
+  const ck = `${taskId}_${weekKey}`;
+  if (!state.comments[ck]) state.comments[ck] = {taskId, weekKey};
+  state.comments[ck].deadline = deadline;
+  saveStorage();
+};
+
+window.toggleAction = function(idx, done) {
+  state.actions[idx].done = done;
+  saveStorage();
+};
+
+window.deleteAction = function(idx) {
+  state.actions.splice(idx, 1);
+  saveStorage();
+  renderMeeting();
+};
+
+// =====================================================================
+// SCREEN 6: DEPT REPORT
+// =====================================================================
+function renderDept() {
+  computeAllStatuses();
+  const dept = state.deptTab;
+  const weekKey = getWeekKey(state.reportDate);
+  const tasks = state.tasks.filter(t => !t.isSummary && (t.resource || '').split(',').map(s => s.trim()).includes(dept));
+  const allTasks = state.tasks;
+
+  // Past 3 weeks
+  const pastWeeks = [];
+  const rd = toDate(state.reportDate);
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(rd.getTime() - i * 7 * 86400000);
+    pastWeeks.push(getWeekKey(d.toISOString().slice(0, 10)));
+  }
+
+  const tabsHtml = DEPTS.map(d =>
+    `<div class="dept-tab${d === dept ? ' active' : ''}" onclick="setDeptTab('${d}')">${d}</div>`
+  ).join('');
+
+  const rows = tasks.map(t => {
+    const ck = `${t.id}_${weekKey}`;
+    const c = state.comments[ck] || {};
+    const saved = !!c.comment;
+    const authorKey = `author_${dept}`;
+    const savedAuthor = localStorage.getItem(authorKey) || '';
+    const pastCols = pastWeeks.map(wk => {
+      const pc = state.comments[`${t.id}_${wk}`] || {};
+      return `<td style="font-size:10px;background:#fafafa;max-width:110px;color:#666;vertical-align:top;padding:4px">
+        ${pc.comment ? `<div>${pc.comment}</div><div style="color:#aaa;font-size:9px">${pc.author||''}</div>` : '—'}
+      </td>`;
+    }).join('');
+
+    return `<tr>
+      <td style="font-size:10px;color:#888">${t.wbs}</td>
+      <td style="min-width:130px">${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+      <td style="white-space:nowrap;font-size:11px">${t.bstart||'—'}</td>
+      <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
+      <td>${pctBar(t.pct)}</td>
+      <td style="white-space:nowrap;font-size:11px">${t.start||'—'}</td>
+      <td style="white-space:nowrap;font-size:11px">${t.end||'—'}</td>
+      <td>${statusBadge(t.status)}</td>
+      <td>
+        <textarea class="comment-input${saved?' saved':''}" id="dc_${t.id}"
+          placeholder="進捗コメントを入力...">${c.comment||''}</textarea>
+      </td>
+      <td>
+        <input type="text" id="da_${t.id}" value="${c.author||savedAuthor}" placeholder="担当者名"
+          style="width:90px;border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px">
+        <button class="btn btn-success btn-sm" style="margin-top:3px;width:90px" onclick="saveDeptComment(${t.id},'${weekKey}','${dept}')">送信</button>
+      </td>
+      ${pastCols}
+    </tr>`;
+  }).join('');
+
+  document.getElementById('content').innerHTML = `
+    <div class="dept-tabs">${tabsHtml}</div>
+    <div class="section">
+      <h2 style="margin-bottom:12px">【${dept}】担当タスク一覧（${tasks.length}件）
+        <span class="text-muted" style="font-size:11px;font-weight:400">報告日: ${state.reportDate}（${weekKey}）</span>
+      </h2>
+      ${tasks.length === 0 ? '<p class="text-muted">このフィルタに該当するタスクはありません</p>' :
+      `<div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>WBS</th><th>タスク名</th><th>基準開始</th><th>基準終了</th>
+              <th>達成率</th><th>予測開始</th><th>予測終了</th><th>ステータス</th>
+              <th>進捗コメント</th><th>担当者名</th>
+              ${pastWeeks.map(wk => `<th style="background:#f0f0f0;font-size:10px">${wk}<br>（過去）</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`}
+    </div>`;
+}
+
+window.setDeptTab = function(dept) { state.deptTab = dept; renderDept(); };
+
+window.saveDeptComment = function(taskId, weekKey, dept) {
+  const comment = document.getElementById(`dc_${taskId}`)?.value || '';
+  const author  = document.getElementById(`da_${taskId}`)?.value || '';
+  const ck = `${taskId}_${weekKey}`;
+  state.comments[ck] = {
+    taskId, weekKey,
+    comment, author,
+    savedAt: new Date().toISOString(),
+    screen: 'dept',
+  };
+  // Remember author name for this dept
+  if (author) localStorage.setItem(`author_${dept}`, author);
+  saveStorage();
+  const el = document.getElementById(`dc_${taskId}`);
+  if (el) el.classList.toggle('saved', !!comment);
+  // Flash feedback
+  const btn = el?.closest('td')?.querySelector('button');
+  if (btn) { const orig = btn.textContent; btn.textContent = '✓ 送信済み'; setTimeout(() => btn.textContent = orig, 1500); }
+};
+
+// =====================================================================
+// ACTION MODAL
+// =====================================================================
+window.addAction = function() {
+  const content = document.getElementById('act-content').value.trim();
+  if (!content) { alert('内容を入力してください'); return; }
+  state.actions.push({
+    id: 'act_' + Date.now(),
+    content,
+    owner:    document.getElementById('act-owner').value,
+    deadline: document.getElementById('act-deadline').value,
+    priority: document.getElementById('act-priority').value,
+    createdAt: new Date().toISOString(),
+    done: false,
+  });
+  saveStorage();
+  closeModal('action-modal');
+  if (state.currentScreen === 'meeting') renderMeeting();
+};
+
+// =====================================================================
+// MODAL HELPERS
+// =====================================================================
+window.openModal = function(id) {
+  document.getElementById(id).classList.add('show');
+};
+window.closeModal = function(id) {
+  document.getElementById(id).classList.remove('show');
+};
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('show');
+  });
+});
+
+// =====================================================================
+// TOOLTIP
+// =====================================================================
+function showTooltip(event, html) {
+  const t = document.getElementById('tooltip');
+  t.innerHTML = html;
+  t.style.display = 'block';
+  t.style.left = (event.clientX + 12) + 'px';
+  t.style.top  = (event.clientY + 12) + 'px';
+}
+function hideTooltip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+document.addEventListener('mousemove', function(e) {
+  const t = document.getElementById('tooltip');
+  if (t.style.display !== 'none') {
+    t.style.left = (e.clientX + 12) + 'px';
+    t.style.top  = (e.clientY + 12) + 'px';
+  }
+});
+
+// =====================================================================
+// SIDEBAR NAVIGATION
+// =====================================================================
+document.querySelectorAll('#sidebar-nav a').forEach(a => {
+  a.addEventListener('click', function() { navigate(this.dataset.screen); });
+});
+
+// =====================================================================
+// INIT
+// =====================================================================
+function init() {
+  loadStorage();
+  state.tasks = SAMPLE_TASKS.map(t => ({...t}));
+  computeAllStatuses();
+  updateSidebarInfo();
+  navigate('dashboard');
+}
+
+init();
+</script>
+</body>
+</html>
