@@ -1332,7 +1332,7 @@ function computeLayout(nodes, edges) {
     if (!byDepth[d]) byDepth[d] = [];
     byDepth[d].push(n);
   });
-  const NW = 190, NH = 72, CGAP = 60, RGAP = 14;
+  const NW = 190, NH = 96, CGAP = 60, RGAP = 14;
   nodes.forEach(n => {
     const d = depth[n.id] || 0;
     const col = byDepth[d];
@@ -1392,7 +1392,7 @@ function renderNW() {
   const {nodes, edges} = buildGraph(modeTasks);
   computeLayout(nodes, edges);
 
-  const NW = 190, NH = 72;
+  const NW = 190, NH = 96;
   const maxX = nodes.length ? Math.max(...nodes.map(n => n.gx)) + NW + 40 : 400;
   const maxY = nodes.length ? Math.max(...nodes.map(n => n.gy)) + NH + 40 : 300;
   const CANVAS_W = Math.max(maxX + 60, 600);
@@ -1462,21 +1462,25 @@ function renderNW() {
 
   // Nodes
   nodes.forEach(n => {
-    const statusBgColor = {
+    const isClose = n.status === 'Close';
+    const statusBgColor = isClose ? '#D9D9D9' : ({
       'On-going': '#E2EFDA', 'Delay': '#FFE0E0',
-      'Close': '#DDEEFF', 'nActive': '#F2F2F2', 'Disable': '#F2F2F2'
-    }[n.status] || '#fff';
-    const statusBorderColor = {
+      'nActive': '#F2F2F2', 'Disable': '#F2F2F2'
+    }[n.status] || '#fff');
+    const statusBorderColor = isClose ? '#AAAAAA' : ({
       'On-going': '#00B050', 'Delay': '#FF0000',
-      'Close': '#0070C0', 'nActive': '#808080', 'Disable': '#BFBFBF'
-    }[n.status] || '#ccc';
-    const isCP = n.critical === 'はい';
+      'nActive': '#808080', 'Disable': '#BFBFBF'
+    }[n.status] || '#ccc');
+    const isCP = !isClose && n.critical === 'はい';
     const isSelected = n.id === state.nwSelectedId;
+    const textColor = isClose ? '#888888' : '#222';
 
     const ng = g.append('g').attr('class', 'nw-node')
       .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
       .style('cursor', 'pointer')
-      .on('click', () => selectNWNode(n.id));
+      .on('click', () => selectNWNode(n.id))
+      .on('dblclick', (e) => { e.stopPropagation(); showNWSubPanel(n.id); })
+      .on('contextmenu', (e) => { e.preventDefault(); showNWContextMenu(e, n.id); });
 
     ng.append('rect')
       .attr('width', NW).attr('height', NH)
@@ -1485,7 +1489,7 @@ function renderNW() {
       .attr('stroke', isSelected ? '#333' : isCP ? '#e53935' : statusBorderColor)
       .attr('stroke-width', isSelected ? 3 : isCP ? 2.5 : 1.5);
 
-    // CP badge
+    // CP badge (only for non-Close tasks)
     if (isCP) {
       ng.append('rect').attr('x', NW - 28).attr('y', 0).attr('width', 22).attr('height', 14)
         .attr('rx', 2).attr('fill', '#e53935');
@@ -1494,27 +1498,37 @@ function renderNW() {
     }
 
     // WBS number
-    ng.append('text').attr('x', 8).attr('y', 14)
-      .attr('font-size', '9px').attr('fill', '#888').text(n.wbs);
+    ng.append('text').attr('x', 8).attr('y', 13)
+      .attr('font-size', '9px').attr('fill', isClose ? '#AAAAAA' : '#888').text(n.wbs);
 
     // Task name (wrap at ~22 chars)
     const name = n.name;
     const line1 = name.slice(0, 22);
     const line2 = name.length > 22 ? name.slice(22, 42) + (name.length > 42 ? '…' : '') : '';
-    ng.append('text').attr('x', NW / 2).attr('y', line2 ? 30 : 36)
+    ng.append('text').attr('x', NW / 2).attr('y', line2 ? 28 : 34)
       .attr('text-anchor', 'middle').attr('font-size', '11px').attr('font-weight', '600')
-      .attr('fill', '#222').text(line1);
+      .attr('fill', textColor).text(line1);
     if (line2) {
-      ng.append('text').attr('x', NW / 2).attr('y', 44)
-        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', '#222').text(line2);
+      ng.append('text').attr('x', NW / 2).attr('y', 42)
+        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', textColor).text(line2);
     }
 
+    // Separator line
+    ng.append('line').attr('x1', 6).attr('x2', NW - 6).attr('y1', 58).attr('y2', 58)
+      .attr('stroke', isClose ? '#BBBBBB' : '#ddd').attr('stroke-width', 1);
+
     // Status + pct
-    ng.append('text').attr('x', NW / 2).attr('y', NH - 6)
-      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', '#555')
+    ng.append('text').attr('x', NW / 2).attr('y', 71)
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#888888' : '#555')
       .text(`${n.status} | ${n.pct}%`);
 
-    ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>WBS: ${n.wbs}<br>担当: ${n.resource||'—'}<br>達成率: ${n.pct}%`))
+    // Resource (担当)
+    const resLabel = (n.resource || '—').length > 22 ? (n.resource || '—').slice(0, 21) + '…' : (n.resource || '—');
+    ng.append('text').attr('x', NW / 2).attr('y', 87)
+      .attr('text-anchor', 'middle').attr('font-size', '10px').attr('fill', isClose ? '#AAAAAA' : '#4472C4')
+      .text(`担当: ${resLabel}`);
+
+    ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>WBS: ${n.wbs}<br>担当: ${n.resource||'—'}<br>ステータス: ${n.status}<br>達成率: ${n.pct}%${isCP ? '<br>🔴 クリティカルパス' : ''}`))
       .on('mouseout', hideTooltip);
   });
 
@@ -1558,11 +1572,219 @@ function selectNWNode(id) {
     <div class="nw-detail-row"><div class="nw-detail-label">CP</div><div class="nw-detail-val">${task.critical==='はい'?'<span class="cp-badge">CP</span>':'—'}</div></div>
     <div class="nw-detail-row"><div class="nw-detail-label">Note</div><div class="nw-detail-val">${task.note||'—'}</div></div>
     <hr style="margin:10px 0;border-color:#eee">
-    <div style="margin-top:8px">
+    <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" onclick="state.nwMode='sub';state.nwSubDepth=2;renderNW()">周辺NWを表示</button>
+      <button class="btn btn-sm btn-outline" onclick="showNWSubPanel(${id})">サブグラフを表示</button>
+    </div>
+    <hr style="margin:12px 0;border-color:#eee">
+    <div style="color:#AAAAAA;font-style:italic;font-size:11px;line-height:1.8">
+      【Phase 2 追加予定】<br>
+      ・トータルフロート（TF）<br>
+      ・フリーフロート（FF）<br>
+      ・最早開始日（ES）/ 最早終了日（EF）<br>
+      ・最遅開始日（LS）/ 最遅終了日（LF）
     </div>`;
   // Highlight selected node
   renderNW();
+}
+
+// NW context menu
+window.showNWContextMenu = function(event, id) {
+  d3.select('#nw-ctx-menu').remove();
+  const menu = d3.select('body').append('div')
+    .attr('id', 'nw-ctx-menu')
+    .style('position', 'fixed')
+    .style('left', event.clientX + 'px')
+    .style('top', event.clientY + 'px')
+    .style('background', '#fff')
+    .style('border', '1px solid #ddd')
+    .style('border-radius', '4px')
+    .style('box-shadow', '0 2px 8px rgba(0,0,0,.25)')
+    .style('z-index', '9999')
+    .style('padding', '4px 0')
+    .style('min-width', '160px');
+  menu.append('div')
+    .style('padding', '7px 16px').style('cursor', 'pointer').style('font-size', '12px')
+    .text('サブグラフを表示')
+    .on('mouseover', function() { d3.select(this).style('background', '#f0f4fa'); })
+    .on('mouseout',  function() { d3.select(this).style('background', ''); })
+    .on('click', () => { d3.select('#nw-ctx-menu').remove(); showNWSubPanel(id); });
+  // close on next click anywhere
+  setTimeout(() => {
+    const close = () => { d3.select('#nw-ctx-menu').remove(); document.removeEventListener('click', close); };
+    document.addEventListener('click', close);
+  }, 10);
+};
+
+// NW subgraph bottom panel
+window.showNWSubPanel = function(id) {
+  state.nwSubPanelId = id;
+  if (!state.nwSubPanelDepth) state.nwSubPanelDepth = 2;
+  const task = state.tasks.find(t => t.id === id);
+  const wrap = document.getElementById('nw-wrap');
+  if (!wrap) return;
+  let panel = document.getElementById('nw-sub-panel');
+  if (!panel) {
+    wrap.insertAdjacentHTML('beforeend', `
+      <div id="nw-sub-panel" style="border-top:2px solid #4472C4;margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#f5f8ff;border-bottom:1px solid #dde4f0">
+          <span style="font-weight:600;font-size:12px">サブグラフ: <span id="nw-sub-title"></span></span>
+          <div style="display:flex;align-items:center;gap:12px">
+            <label style="font-size:11px;display:flex;align-items:center;gap:6px">
+              深さ:
+              <input type="range" id="nw-sub-depth-slider" min="1" max="5" value="2"
+                style="width:90px;vertical-align:middle"
+                oninput="state.nwSubPanelDepth=+this.value;document.getElementById('nw-sub-depth-val').textContent=this.value;drawNWSubPanel()">
+              <span id="nw-sub-depth-val">2</span>
+            </label>
+            <button class="btn btn-sm btn-outline" onclick="closeNWSubPanel()">✕ 閉じる</button>
+          </div>
+        </div>
+        <div id="nw-sub-svg-container" style="height:320px;overflow:hidden">
+          <svg id="nw-sub-svg" style="width:100%;height:100%"></svg>
+        </div>
+      </div>`);
+    panel = document.getElementById('nw-sub-panel');
+  }
+  const titleEl = document.getElementById('nw-sub-title');
+  if (titleEl) titleEl.textContent = task ? task.name : String(id);
+  const slider = document.getElementById('nw-sub-depth-slider');
+  if (slider) { slider.value = state.nwSubPanelDepth; document.getElementById('nw-sub-depth-val').textContent = state.nwSubPanelDepth; }
+  drawNWSubPanel();
+};
+
+window.closeNWSubPanel = function() {
+  const panel = document.getElementById('nw-sub-panel');
+  if (panel) panel.remove();
+  state.nwSubPanelId = null;
+};
+
+function drawNWSubPanel() {
+  const id = state.nwSubPanelId;
+  if (!id) return;
+  const depth = state.nwSubPanelDepth || 2;
+  const regularTasks = state.tasks.filter(t => !t.isSummary && t.active !== 'いいえ');
+  const selected = new Set([id]);
+  const allEdges = [];
+  regularTasks.forEach(t => {
+    if (!t.pred) return;
+    t.pred.split(',').map(s => parseInt(s.trim())).forEach(pid => allEdges.push({source: pid, target: t.id}));
+  });
+  for (let i = 0; i < depth; i++) {
+    const toAdd = new Set();
+    allEdges.forEach(e => {
+      if (selected.has(e.source)) toAdd.add(e.target);
+      if (selected.has(e.target)) toAdd.add(e.source);
+    });
+    toAdd.forEach(tid => selected.add(tid));
+  }
+  const subTasks = regularTasks.filter(t => selected.has(t.id));
+  const {nodes, edges} = buildGraph(subTasks);
+  computeLayout(nodes, edges);
+
+  const NW = 190, NH = 96;
+  const containerEl = document.getElementById('nw-sub-svg-container');
+  if (!containerEl) return;
+  const cW = containerEl.clientWidth || 600;
+  const cH = containerEl.clientHeight || 320;
+
+  const svg = d3.select('#nw-sub-svg').attr('width', cW).attr('height', cH);
+  svg.selectAll('*').remove();
+
+  const defs = svg.append('defs');
+  ['normal','cp'].forEach(type => {
+    defs.append('marker').attr('id', `arrow-sub-${type}`)
+      .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
+      .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', type === 'cp' ? '#e53935' : '#4472C4');
+  });
+
+  const g = svg.append('g').attr('id', 'nw-sub-g');
+
+  // Edges
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+  edges.forEach(e => {
+    const src = nodeMap[e.source], tgt = nodeMap[e.target];
+    if (!src || !tgt) return;
+    const isCP = src.critical === 'はい' && tgt.critical === 'はい';
+    const sx = src.gx + NW, sy = src.gy + NH / 2;
+    const tx = tgt.gx, ty = tgt.gy + NH / 2;
+    const cx = (sx + tx) / 2;
+    g.append('path')
+      .attr('d', `M${sx},${sy} C${cx},${sy} ${cx},${ty} ${tx},${ty}`)
+      .attr('fill', 'none').attr('stroke', isCP ? '#e53935' : '#4472C4')
+      .attr('stroke-width', isCP ? 2.5 : 1.5)
+      .attr('marker-end', `url(#arrow-sub-${isCP ? 'cp' : 'normal'})`)
+      .attr('opacity', .8);
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    const isClose = n.status === 'Close';
+    const bgColor = isClose ? '#D9D9D9' : ({'On-going':'#E2EFDA','Delay':'#FFE0E0','nActive':'#F2F2F2','Disable':'#F2F2F2'}[n.status] || '#fff');
+    const borderColor = isClose ? '#AAAAAA' : ({'On-going':'#00B050','Delay':'#FF0000','nActive':'#808080','Disable':'#BFBFBF'}[n.status] || '#ccc');
+    const isCP = !isClose && n.critical === 'はい';
+    const isFocus = n.id === id;
+    const textColor = isClose ? '#888888' : '#222';
+
+    const ng = g.append('g').attr('class', 'nw-node')
+      .attr('transform', `translate(${n.gx + 20},${n.gy + 20})`)
+      .style('cursor', 'pointer')
+      .on('click', () => { state.nwSubPanelId = n.id; state.nwSubPanelDepth = depth; document.getElementById('nw-sub-title').textContent = n.name; drawNWSubPanel(); });
+
+    ng.append('rect').attr('width', NW).attr('height', NH).attr('rx', 5)
+      .attr('fill', bgColor)
+      .attr('stroke', isFocus ? '#ff9800' : isCP ? '#e53935' : borderColor)
+      .attr('stroke-width', isFocus ? 3 : isCP ? 2.5 : 1.5);
+
+    if (isCP) {
+      ng.append('rect').attr('x', NW - 28).attr('y', 0).attr('width', 22).attr('height', 14)
+        .attr('rx', 2).attr('fill', '#e53935');
+      ng.append('text').attr('x', NW - 17).attr('y', 10).attr('text-anchor', 'middle')
+        .attr('font-size', '9px').attr('fill', '#fff').attr('font-weight', '700').text('CP');
+    }
+
+    ng.append('text').attr('x', 8).attr('y', 13).attr('font-size', '9px')
+      .attr('fill', isClose ? '#AAAAAA' : '#888').text(n.wbs);
+
+    const line1 = n.name.slice(0, 22);
+    const line2 = n.name.length > 22 ? n.name.slice(22, 42) + (n.name.length > 42 ? '…' : '') : '';
+    ng.append('text').attr('x', NW / 2).attr('y', line2 ? 28 : 34)
+      .attr('text-anchor', 'middle').attr('font-size', '11px').attr('font-weight', '600')
+      .attr('fill', textColor).text(line1);
+    if (line2) {
+      ng.append('text').attr('x', NW / 2).attr('y', 42)
+        .attr('text-anchor', 'middle').attr('font-size', '11px').attr('fill', textColor).text(line2);
+    }
+
+    ng.append('line').attr('x1', 6).attr('x2', NW - 6).attr('y1', 58).attr('y2', 58)
+      .attr('stroke', isClose ? '#BBBBBB' : '#ddd').attr('stroke-width', 1);
+
+    ng.append('text').attr('x', NW / 2).attr('y', 71)
+      .attr('text-anchor', 'middle').attr('font-size', '10px')
+      .attr('fill', isClose ? '#888888' : '#555').text(`${n.status} | ${n.pct}%`);
+
+    const resLabel = (n.resource || '—').length > 22 ? (n.resource || '—').slice(0, 21) + '…' : (n.resource || '—');
+    ng.append('text').attr('x', NW / 2).attr('y', 87)
+      .attr('text-anchor', 'middle').attr('font-size', '10px')
+      .attr('fill', isClose ? '#AAAAAA' : '#4472C4').text(`担当: ${resLabel}`);
+
+    ng.on('mouseover', (e) => showTooltip(e, `<b>${n.name}</b><br>担当: ${n.resource||'—'}<br>ステータス: ${n.status}<br>達成率: ${n.pct}%`))
+      .on('mouseout', hideTooltip);
+  });
+
+  // Zoom/pan
+  const zoom = d3.zoom().scaleExtent([0.2, 3])
+    .on('zoom', (event) => { g.attr('transform', event.transform); });
+  svg.call(zoom);
+
+  if (nodes.length > 0) {
+    const maxX = Math.max(...nodes.map(n => n.gx)) + NW + 60;
+    const maxY = Math.max(...nodes.map(n => n.gy)) + NH + 60;
+    const initScale = Math.min(1, (cW - 40) / maxX, (cH - 40) / maxY);
+    svg.call(zoom.transform, d3.zoomIdentity.translate(20, 20).scale(initScale));
+  }
 }
 
 // =====================================================================
