@@ -1728,7 +1728,9 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '}' +
 'function draw(){' +
 '  const ct=document.getElementById("ctnr");' +
-'  if(!ct||ct.clientWidth===0){requestAnimationFrame(draw);return;}' +
+'  const cW=(ct&&ct.clientWidth>10?ct.clientWidth:0)||(window.innerWidth||1000);' +
+'  const cH=(ct&&ct.clientHeight>10?ct.clientHeight:0)||Math.max((window.innerHeight||700)-62,300);' +
+'  if(cW<10){setTimeout(draw,50);return;}' +
 '  const reg=ALL.filter(t=>!t.isSummary&&t.active!=="いいえ");' +
 '  const sel=new Set([fid]);const ae=[];' +
 '  reg.forEach(t=>{if(!t.pred)return;t.pred.split(",").map(s=>parseInt(s.trim())).forEach(p=>ae.push({source:p,target:t.id}));});' +
@@ -1736,7 +1738,6 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '  const sub=reg.filter(t=>sel.has(t.id));' +
 '  const{nodes,edges}=bG(sub);cL(nodes,edges);' +
 '  const NW=190,NH=96;' +
-'  const cW=ct.clientWidth,cH=ct.clientHeight;' +
 '  const svg=d3.select("#sv").attr("width",cW).attr("height",cH);' +
 '  svg.selectAll("*").remove();' +
 '  const defs=svg.append("defs");' +
@@ -1785,7 +1786,7 @@ function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
 '  }' +
 '}' +
 'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}' +
-'window.addEventListener("resize",draw);if(d3)draw();' +
+'window.addEventListener("resize",draw);if(d3){setTimeout(draw,0);}' +
 '<\/script></body></html>';
 }
 
@@ -1918,7 +1919,7 @@ function drawGantt() {
       else if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
       else if (c.key === 'name') {
         const toggle = isSummary ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>` : '<span style="display:inline-block;width:18px"></span>';
-        val = `<div class="${indent}" style="white-space:nowrap;overflow:hidden;max-width:180px;text-overflow:ellipsis">${toggle}${task.name}</div>`;
+        val = `<div class="${indent}" style="white-space:nowrap">${toggle}${task.name}</div>`;
       }
       else if (c.key === 'resource') val = `<span style="font-size:10px;color:#888">${task.resource||''}</span>`;
       else if (c.key === 'pct') val = `${pctBar(task.pct)}`;
