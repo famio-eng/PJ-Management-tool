@@ -744,10 +744,26 @@ function loadStorage() {
 // =====================================================================
 // STATUS ENGINE (MSP計算式の完全再現)
 // =====================================================================
-function toDate(s) {
-  if (!s) return null;
+// Excelエクスポートの日付文字列を Date に変換
+// 対応形式: "2024年04月15日 8:00" / "2024/04/15" / Date オブジェクト / "N/A" → null
+function parseExcelDate(val) {
+  if (!val || val === 'N/A') return null;
+  if (val instanceof Date) return isNaN(val) ? null : val;
+  const s = String(val).trim();
+  // "2024年04月15日" 形式
+  const m = s.match(/(\d{4})年(\d{2})月(\d{2})日/);
+  if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  // "2024/04/15" 形式
+  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return new Date(s.replace(/\//g, '-'));
+  // その他（ISO文字列など）
   const d = new Date(s);
   return isNaN(d) ? null : d;
+}
+
+function toDate(s) {
+  if (!s) return null;
+  if (s instanceof Date) return isNaN(s) ? null : s;
+  return parseExcelDate(s);
 }
 
 function daysBetween(a, b) {
@@ -886,6 +902,7 @@ document.getElementById('excel-file-input').addEventListener('change', function(
         '残存期間':'remain','先行タスク':'pred','リソース名':'resource','達成率':'pct',
         'クリティカル':'critical','アクティブ':'active','アウトラインフィールド':'isSummaryRaw'
       };
+      const DATE_FIELDS = ['start','end','bstart','bend','astart','aend'];
       state.tasks = rows.map((row, i) => {
         const t = {};
         Object.entries(colMap).forEach(([jp, en]) => {
@@ -893,7 +910,17 @@ document.getElementById('excel-file-input').addEventListener('change', function(
         });
         t.id = parseInt(t.id) || (i + 1);
         t.level = parseInt(t.level) || 1;
-        t.pct = parseFloat(String(t.pct || '0').replace('%','')) || 0;
+        // 達成率: 0〜1 の小数 → 0〜100 の整数に変換
+        const rawPct = parseFloat(String(t.pct || '0').replace('%',''));
+        if (!isNaN(rawPct)) {
+          t.pct = rawPct <= 1.0 && rawPct >= 0 && String(t.pct || '').indexOf('%') === -1
+            ? Math.round(rawPct * 100)
+            : Math.round(rawPct);
+        } else {
+          t.pct = 0;
+        }
+        // 日付列: 文字列 → Date オブジェクトに変換
+        DATE_FIELDS.forEach(f => { t[f] = parseExcelDate(t[f]); });
         t.isSummary = t.isSummaryRaw === 'はい' || t.level === 1;
         return t;
       });
