@@ -1,5 +1,17 @@
 # 実装進捗
 
+## Phase 2 実装状況
+
+### Phase 2-A: M365 認証 + Graph API（ブランチ: phase2/m365-graph-integration）
+- M365ログインUIの追加（MSALv3）：完了
+- サインイン後のユーザー名自動識別（/me）→ 機能別進捗報告の担当者名自動入力：完了
+- アクション追加時の Microsoft ToDo 自動登録（Graph API）：完了
+- **前提条件**: `M365_CONFIG.clientId` / `tenantId` を実際のAzure ADアプリの値に書き換えること
+  - リダイレクトURIをAzure AD側で登録すること（ポップアップ方式のため `redirectUri` 不要だが念のため）
+  - アプリの委任アクセス許可: `User.Read`, `Tasks.ReadWrite` が必要
+
+---
+
 ## 完了（動作確認済み）
 
 ### ① ビュー共通

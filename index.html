@@ -6,6 +6,7 @@
 <title>PJ進捗管理ツール</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/3.27.0/js/msal-browser.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',sans-serif;font-size:13px;background:#f0f2f5;display:flex;height:100vh;overflow:hidden;color:#333}
@@ -223,6 +224,12 @@ body.dark .sidebar-footer .btn-outline{background:rgba(255,255,255,.08);border-c
 #night-toggle:hover{background:rgba(0,0,0,.08)}
 body.dark #night-toggle{border-color:#3a3a5c;color:#e0e0e0}
 body.dark #night-toggle:hover{background:rgba(255,255,255,.1)}
+/* M365 Auth UI */
+#auth-area{display:flex;align-items:center;gap:6px}
+#auth-user-display{font-size:11px;color:#1a3a5c;background:#e8edf5;border-radius:12px;padding:3px 9px;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+body.dark #auth-user-display{background:#243555;color:#90b8e0}
+#auth-btn{white-space:nowrap}
+.todo-push-indicator{font-size:10px;color:#00B050;margin-left:4px;animation:fadeIn .3s}
 /* Column resize handle */
 .col-resizer{position:absolute;right:0;top:0;width:5px;height:100%;cursor:col-resize;user-select:none;z-index:2}
 .col-resizer:hover,.col-resizer.resizing{background:rgba(68,114,196,.4)}
@@ -302,6 +309,10 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
       <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
       <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 印刷</button>
       <button id="night-toggle" onclick="toggleTheme()" title="ダーク/ライトモード切替">🌙</button>
+      <div id="auth-area">
+        <span id="auth-user-display" style="display:none"></span>
+        <button id="auth-btn" class="btn btn-outline btn-sm" onclick="msalSignIn()">🔐 M365ログイン</button>
+      </div>
     </div>
   </div>
   <div id="content"></div>
@@ -523,6 +534,181 @@ const state = {
   tlSelectedIds: new Set(),
   tlExpandedIds: new Set(),
 };
+
+// =====================================================================
+// PHASE 2: M365 認証 + Graph API
+// =====================================================================
+const M365_CONFIG = {
+  // ↓ Azure AD アプリ登録後に実際の値に書き換えてください
+  clientId:  'YOUR_CLIENT_ID',
+  tenantId:  'YOUR_TENANT_ID',
+  // Microsoft ToDo の登録先リスト名（自動作成されます）
+  todoListName: 'PJ進捗管理アクション',
+};
+
+const _msalInstance = (() => {
+  if (typeof msal === 'undefined') return null;
+  return new msal.PublicClientApplication({
+    auth: {
+      clientId:    M365_CONFIG.clientId,
+      authority:   `https://login.microsoftonline.com/${M365_CONFIG.tenantId}`,
+      redirectUri: window.location.href.split('?')[0].split('#')[0],
+    },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false },
+  });
+})();
+
+const _GRAPH_SCOPES = ['User.Read', 'Tasks.ReadWrite'];
+let _msalAccount = null;
+
+function initMsal() {
+  if (!_msalInstance) return;
+  const accounts = _msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    _msalAccount = accounts[0];
+    _onSignedIn(_msalAccount);
+  }
+}
+
+window.msalSignIn = async function() {
+  if (!_msalInstance) {
+    alert('MSAL が初期化されていません。\nclientId / tenantId を設定してください。');
+    return;
+  }
+  if (M365_CONFIG.clientId === 'YOUR_CLIENT_ID') {
+    alert('clientId / tenantId がプレースホルダーのままです。\nindex.html の M365_CONFIG を編集してください。');
+    return;
+  }
+  try {
+    const result = await _msalInstance.loginPopup({ scopes: _GRAPH_SCOPES });
+    _msalAccount = result.account;
+    _onSignedIn(_msalAccount);
+  } catch(e) {
+    console.error('M365 sign-in error', e);
+  }
+};
+
+window.msalSignOut = async function() {
+  if (!_msalInstance || !_msalAccount) return;
+  try {
+    await _msalInstance.logoutPopup({ account: _msalAccount });
+  } catch(_) {}
+  _msalAccount = null;
+  _onSignedOut();
+};
+
+function _onSignedIn(account) {
+  state.msalUser = { name: account.name, username: account.username };
+  _updateAuthUI();
+  if (state.currentScreen === 'dept') renderDept();
+}
+
+function _onSignedOut() {
+  state.msalUser = null;
+  _updateAuthUI();
+  if (state.currentScreen === 'dept') renderDept();
+}
+
+function _updateAuthUI() {
+  const btn     = document.getElementById('auth-btn');
+  const display = document.getElementById('auth-user-display');
+  if (!btn || !display) return;
+  if (_msalAccount) {
+    display.textContent = '👤 ' + (_msalAccount.name || _msalAccount.username);
+    display.style.display = 'inline';
+    btn.textContent = 'サインアウト';
+    btn.onclick = window.msalSignOut;
+  } else {
+    display.style.display = 'none';
+    btn.textContent = '🔐 M365ログイン';
+    btn.onclick = window.msalSignIn;
+  }
+}
+
+async function _getGraphToken() {
+  if (!_msalInstance || !_msalAccount) return null;
+  try {
+    const r = await _msalInstance.acquireTokenSilent({
+      scopes: _GRAPH_SCOPES,
+      account: _msalAccount,
+    });
+    return r.accessToken;
+  } catch(_) {
+    try {
+      const r = await _msalInstance.acquireTokenPopup({ scopes: _GRAPH_SCOPES });
+      _msalAccount = r.account;
+      return r.accessToken;
+    } catch(e2) {
+      console.error('Token acquisition failed', e2);
+      return null;
+    }
+  }
+}
+
+// Microsoft ToDo にアクションタスクをプッシュ
+async function pushActionToToDo(action) {
+  const token = await _getGraphToken();
+  if (!token) return;
+
+  const listId = await _getOrCreateToDoList(token, M365_CONFIG.todoListName);
+  if (!listId) { console.error('ToDo list not found/created'); return; }
+
+  const body = {
+    title: action.content,
+    importance: action.priority === '高' ? 'high' : action.priority === '低' ? 'low' : 'normal',
+    body: {
+      contentType: 'text',
+      content: `担当: ${action.owner || '—'}\n作成日時: ${action.createdAt}`,
+    },
+  };
+  if (action.deadline) {
+    body.dueDateTime = { dateTime: action.deadline + 'T00:00:00', timeZone: 'Asia/Tokyo' };
+  }
+
+  try {
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/me/todo/lists/${listId}/tasks`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      }
+    );
+    if (!resp.ok) throw new Error(await resp.text());
+  } catch(e) {
+    console.error('ToDo push failed', e);
+  }
+}
+
+async function _getOrCreateToDoList(token, listName) {
+  try {
+    const resp = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const found = (data.value || []).find(l => l.displayName === listName);
+    if (found) return found.id;
+
+    const create = await fetch('https://graph.microsoft.com/v1.0/me/todo/lists', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ displayName: listName }),
+    });
+    if (!create.ok) return null;
+    const created = await create.json();
+    return created.id;
+  } catch(e) {
+    console.error('ToDo list fetch/create failed', e);
+    return null;
+  }
+}
 
 // =====================================================================
 // STORAGE MANAGER
@@ -2335,7 +2521,7 @@ function renderDept() {
     const c = state.comments[ck] || {};
     const saved = !!c.comment;
     const authorKey = `author_${dept}`;
-    const savedAuthor = localStorage.getItem(authorKey) || '';
+    const savedAuthor = localStorage.getItem(authorKey) || (state.msalUser ? state.msalUser.name : '');
     const pastCols = pastWeeks.map(wk => {
       const pc = state.comments[`${t.id}_${wk}`] || {};
       return `<td style="font-size:10px;background:#fafafa;max-width:110px;color:#666;vertical-align:top;padding:4px">
@@ -2418,7 +2604,7 @@ window.saveDeptComment = function(taskId, weekKey, dept) {
 window.addAction = function() {
   const content = document.getElementById('act-content').value.trim();
   if (!content) { alert('内容を入力してください'); return; }
-  state.actions.push({
+  const action = {
     id: 'act_' + Date.now(),
     content,
     owner:    document.getElementById('act-owner').value,
@@ -2426,10 +2612,13 @@ window.addAction = function() {
     priority: document.getElementById('act-priority').value,
     createdAt: new Date().toISOString(),
     done: false,
-  });
+  };
+  state.actions.push(action);
   saveStorage();
   closeModal('action-modal');
   if (state.currentScreen === 'meeting') renderMeeting();
+  // Phase 2: M365ログイン済みの場合は Microsoft ToDo に自動登録
+  if (_msalAccount) pushActionToToDo(action);
 };
 
 // =====================================================================
@@ -2994,6 +3183,7 @@ function enhanceGanttTable(wrap) {
 function init() {
   loadStorage();
   initTheme();
+  initMsal();
   state.tasks = SAMPLE_TASKS.map(t => ({...t}));
   computeAllStatuses();
   updateSidebarInfo();
