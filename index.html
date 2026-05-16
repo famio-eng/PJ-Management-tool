@@ -1655,149 +1655,155 @@ window.showNWContextMenu = function(event, id) {
   }, 10);
 };
 
-// NW subgraph — new browser window approach
-// Data is stored on window so popup can access via window.opener
+// NW subgraph — Blob URL approach (avoids document.write CDN-script blocking)
 window.showNWSubPanel = function(id) {
   if (!id) return;
   const depth = state.nwSubPanelDepth || 2;
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
   window._nwSubData = { tasks: state.tasks, focusId: id, title: title, depth: depth };
-  const win = window.open('', 'nw_sub_' + id,
+  const blob = new Blob([buildSubgraphWindowHTML()], {type: 'text/html;charset=utf-8'});
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, '_blank',
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
-  if (!win) { alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
-  win.document.open();
-  win.document.write(buildSubgraphWindowHTML());
-  win.document.close();
+  if (!win) { URL.revokeObjectURL(blobUrl); alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
   win.focus();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
 };
 
 window.closeNWSubPanel = function() { /* new-window approach: no-op */ };
 window.closeNWSubModal = window.closeNWSubPanel;
 
 function buildSubgraphWindowHTML() {
-  return '<!DOCTYPE html>\n<html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>\n' +
-'<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><' + '/script>\n' +
-'<style>\n' +
-'*{box-sizing:border-box;margin:0;padding:0}\n' +
-'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}\n' +
-'#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}\n' +
-'#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}\n' +
-'#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}\n' +
-'#ctnr:active{cursor:grabbing}\n' +
-'svg{display:block;width:100%;height:100%}\n' +
-'.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}\n' +
-'.btn:hover{background:#e8eef8}\n' +
-'label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}\n' +
-'#dv{font-size:12px;font-weight:700;min-width:14px}\n' +
-'#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}\n' +
-'</style></head><body>\n' +
-'<div id="hdr">\n' +
-'  <h2>サブグラフ: <span id="ft"></span></h2>\n' +
-'  <label>深さ:\n' +
-'    <input type="range" id="ds" min="1" max="5" value="2" style="width:80px" oninput="dep=+this.value;document.getElementById(\'dv\').textContent=this.value;draw()">\n' +
-'    <span id="dv">2</span>\n' +
-'  </label>\n' +
-'  <button class="btn" onclick="resetZ()">ズームリセット</button>\n' +
-'  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>\n' +
-'</div>\n' +
-'<div id="ctnr"><svg id="sv"></svg></div>\n' +
-'<div id="tip"></div>\n' +
-'<script>\n' +
-'(function(){\n' +
-'var op=window.opener,_data=op&&op._nwSubData||{};\n' +
-'var ALL=_data.tasks||[],fid=_data.focusId||0,dep=_data.depth||2,_z,_sv;\n' +
-'document.title="サブグラフ: "+(_data.title||fid);\n' +
-'document.getElementById("ft").textContent=_data.title||fid;\n' +
-'document.getElementById("ds").value=dep;\n' +
-'document.getElementById("dv").textContent=dep;\n' +
-'function bG(tasks){\n' +
-'  var ns=tasks.map(function(t){return Object.assign({},t);}),ids=new Set(ns.map(function(n){return n.id;})),es=[];\n' +
-'  ns.forEach(function(n){if(!n.pred)return;n.pred.split(",").map(function(s){return parseInt(s.trim());}).filter(function(p){return ids.has(p);}).forEach(function(p){es.push({source:p,target:n.id});});});\n' +
-'  return{nodes:ns,edges:es};\n' +
-'}\n' +
-'function cL(nodes,edges){\n' +
-'  if(!nodes.length)return;\n' +
-'  var ids=new Set(nodes.map(function(n){return n.id;})),succ={},ind={};\n' +
-'  nodes.forEach(function(n){succ[n.id]=[];ind[n.id]=0;});\n' +
-'  edges.forEach(function(e){if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});\n' +
-'  var dp={},q=nodes.filter(function(n){return ind[n.id]===0;}).map(function(n){return n.id;});\n' +
-'  q.forEach(function(id){dp[id]=0;});\n' +
-'  var vis=new Set(q);\n' +
-'  while(q.length){var id=q.shift();succ[id].forEach(function(sid){dp[sid]=Math.max(dp[sid]||0,(dp[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}\n' +
-'  var bd={},NW=190,NH=96,CG=60,RG=14;\n' +
-'  nodes.forEach(function(n){var d=dp[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});\n' +
-'  var ch={};Object.keys(bd).forEach(function(d){ch[d]=bd[d].length*(NH+RG)-RG;});\n' +
-'  var mh=Math.max.apply(null,Object.values(ch));\n' +
-'  nodes.forEach(function(n){var d=dp[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});\n' +
-'}\n' +
-'function draw(){\n' +
-'  var ct=document.getElementById("ctnr");\n' +
-'  var cW=ct.clientWidth||window.innerWidth||900,cH=ct.clientHeight||window.innerHeight||600;\n' +
-'  var NW=190,NH=96;\n' +
-'  var reg=ALL.filter(function(t){return t.active!=="いいえ";});\n' +
-'  var sel=new Set([fid]),ae=[];\n' +
-'  reg.forEach(function(t){if(!t.pred)return;t.pred.split(",").map(function(s){return parseInt(s.trim());}).forEach(function(p){ae.push({source:p,target:t.id});});});\n' +
-'  for(var i=0;i<dep;i++){var add=new Set();ae.forEach(function(e){if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(function(id){sel.add(id);});}\n' +
-'  var sub=reg.filter(function(t){return sel.has(t.id);});\n' +
-'  var svEl=document.getElementById("sv");\n' +
-'  var svg=d3.select(svEl).attr("width",cW).attr("height",cH);\n' +
-'  svg.selectAll("*").remove();\n' +
-'  if(!sub.length){\n' +
-'    svg.append("text").attr("x",cW/2).attr("y",cH/2).attr("text-anchor","middle").attr("font-size","14px").attr("fill","#888").text("関連タスクが見つかりません（深さを増やしてください）");\n' +
-'    return;\n' +
-'  }\n' +
-'  var gr=bG(sub);cL(gr.nodes,gr.edges);\n' +
-'  var defs=svg.append("defs");\n' +
-'  ["normal","cp"].forEach(function(type){\n' +
-'    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")\n' +
-'      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");\n' +
-'  });\n' +
-'  var g=svg.append("g");\n' +
-'  var nm={};gr.nodes.forEach(function(n){nm[n.id]=n;});\n' +
-'  gr.edges.forEach(function(e){\n' +
-'    var s=nm[e.source],t=nm[e.target];if(!s||!t)return;\n' +
-'    var cp=s.critical==="はい"&&t.critical==="はい";\n' +
-'    var sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;\n' +
-'    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)\n' +
-'      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)\n' +
-'      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);\n' +
-'  });\n' +
-'  gr.nodes.forEach(function(n){\n' +
-'    var ic=n.status==="Close";\n' +
-'    var bg=ic?"#D9D9D9":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");\n' +
-'    var bd=ic?"#AAAAAA":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");\n' +
-'    var icp=!ic&&n.critical==="はい",ifo=n.id===fid,tc=ic?"#888":"#222";\n' +
-'    var ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")\n' +
-'      .on("click",function(){fid=n.id;var tk=ALL.find(function(x){return x.id===n.id;});document.getElementById("ft").textContent=tk?tk.name:n.id;draw();})\n' +
-'      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})\n' +
-'      .on("mouseout",function(){document.getElementById("tip").style.display="none";});\n' +
-'    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg)\n' +
-'      .attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);\n' +
-'    if(icp&&!ic){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}\n' +
-'    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#aaa":"#888").text(n.wbs);\n' +
-'    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";\n' +
-'    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);\n' +
-'    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);\n' +
-'    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#bbb":"#ddd").attr("stroke-width",1);\n' +
-'    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#555").text(n.status+" | "+n.pct+"%");\n' +
-'    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");\n' +
-'    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#4472C4").text("担当: "+res);\n' +
-'  });\n' +
-'  var z=d3.zoom().scaleExtent([0.1,4]).on("zoom",function(ev){g.attr("transform",ev.transform);});\n' +
-'  svg.call(z);_z=z;_sv=svg;\n' +
-'  if(gr.nodes.length){\n' +
-'    var mx=Math.max.apply(null,gr.nodes.map(function(n){return n.gx;}))+NW+60;\n' +
-'    var my=Math.max.apply(null,gr.nodes.map(function(n){return n.gy;}))+NH+60;\n' +
-'    var sc=Math.min(1,(cW-40)/mx,(cH-40)/my);\n' +
-'    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));\n' +
-'  }\n' +
-'}\n' +
-'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}\n' +
-'window.addEventListener("resize",draw);\n' +
-'draw();\n' +
-'})();\n' +
-'<' + '/script></body></html>';
+  // Blob URL approach: browser navigates TO this page, so CDN <script> loads normally.
+  // Functions are at top level (not in IIFE) so HTML onclick/oninput attributes can call them.
+  // Data read from window.opener._nwSubData (same origin as Blob URL).
+  return `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}
+#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}
+#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}
+#ctnr:active{cursor:grabbing}
+svg{display:block;width:100%;height:100%}
+.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}
+.btn:hover{background:#e8eef8}
+label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}
+#dv{font-size:12px;font-weight:700;min-width:14px}
+#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}
+</style></head><body>
+<div id="hdr">
+  <h2>サブグラフ: <span id="ft"></span></h2>
+  <label>深さ:
+    <input type="range" id="ds" min="1" max="5" value="2" style="width:80px" oninput="dep=+this.value;document.getElementById('dv').textContent=this.value;draw()">
+    <span id="dv">2</span>
+  </label>
+  <button class="btn" onclick="resetZ()">ズームリセット</button>
+  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>
+</div>
+<div id="ctnr"><svg id="sv"></svg></div>
+<div id="tip"></div>
+<script>
+var _data = (window.opener && window.opener._nwSubData) || {};
+var ALL = _data.tasks || [], fid = _data.focusId || 0, dep = _data.depth || 2, _z, _sv;
+document.title = "サブグラフ: " + (_data.title || fid);
+document.getElementById("ft").textContent = _data.title || fid;
+document.getElementById("ds").value = dep;
+document.getElementById("dv").textContent = dep;
+
+function buildGraph(tasks) {
+  var ns = tasks.map(function(t){return Object.assign({},t);}),
+      ids = new Set(ns.map(function(n){return n.id;})), es = [];
+  ns.forEach(function(n){
+    if(!n.pred)return;
+    n.pred.split(",").map(function(s){return parseInt(s.trim());})
+      .filter(function(p){return ids.has(p);})
+      .forEach(function(p){es.push({source:p,target:n.id});});
+  });
+  return {nodes:ns,edges:es};
+}
+
+function layout(nodes,edges) {
+  if(!nodes.length)return;
+  var ids=new Set(nodes.map(function(n){return n.id;})),succ={},ind={};
+  nodes.forEach(function(n){succ[n.id]=[];ind[n.id]=0;});
+  edges.forEach(function(e){if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});
+  var dp={},q=nodes.filter(function(n){return ind[n.id]===0;}).map(function(n){return n.id;});
+  q.forEach(function(id){dp[id]=0;});
+  var vis=new Set(q);
+  while(q.length){var id=q.shift();succ[id].forEach(function(sid){dp[sid]=Math.max(dp[sid]||0,(dp[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}
+  var bd={},NW=190,NH=96,CG=60,RG=14;
+  nodes.forEach(function(n){var d=dp[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});
+  var ch={};Object.keys(bd).forEach(function(d){ch[d]=bd[d].length*(NH+RG)-RG;});
+  var mh=Math.max.apply(null,Object.values(ch));
+  nodes.forEach(function(n){var d=dp[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});
+}
+
+function draw() {
+  var ct=document.getElementById("ctnr");
+  var cW=ct.clientWidth||window.innerWidth||900, cH=ct.clientHeight||window.innerHeight||600;
+  var NW=190,NH=96;
+  var reg=ALL.filter(function(t){return t.active!=="いいえ";});
+  var sel=new Set([fid]),ae=[];
+  reg.forEach(function(t){if(!t.pred)return;t.pred.split(",").map(function(s){return parseInt(s.trim());}).forEach(function(p){ae.push({source:p,target:t.id});});});
+  for(var i=0;i<dep;i++){var add=new Set();ae.forEach(function(e){if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(function(id){sel.add(id);});}
+  var sub=reg.filter(function(t){return sel.has(t.id);});
+  var svg=d3.select("#sv").attr("width",cW).attr("height",cH);
+  svg.selectAll("*").remove();
+  if(!sub.length){svg.append("text").attr("x",cW/2).attr("y",cH/2).attr("text-anchor","middle").attr("font-size","14px").attr("fill","#888").text("関連タスクが見つかりません（深さを増やしてください）");return;}
+  var gr=buildGraph(sub);layout(gr.nodes,gr.edges);
+  var defs=svg.append("defs");
+  ["normal","cp"].forEach(function(type){
+    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")
+      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");
+  });
+  var g=svg.append("g");
+  var nm={};gr.nodes.forEach(function(n){nm[n.id]=n;});
+  gr.edges.forEach(function(e){
+    var s=nm[e.source],t=nm[e.target];if(!s||!t)return;
+    var cp=s.critical==="はい"&&t.critical==="はい";
+    var sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;
+    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)
+      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)
+      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);
+  });
+  gr.nodes.forEach(function(n){
+    var ic=n.status==="Close";
+    var bg=ic?"#D9D9D9":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");
+    var bd=ic?"#AAAAAA":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");
+    var icp=!ic&&n.critical==="はい",ifo=n.id===fid,tc=ic?"#888":"#222";
+    var ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")
+      .on("click",function(){fid=n.id;var tk=ALL.find(function(x){return x.id===n.id;});document.getElementById("ft").textContent=tk?tk.name:n.id;draw();})
+      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})
+      .on("mouseout",function(){document.getElementById("tip").style.display="none";});
+    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg).attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);
+    if(icp&&!ic){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}
+    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#aaa":"#888").text(n.wbs);
+    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";
+    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);
+    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);
+    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#bbb":"#ddd").attr("stroke-width",1);
+    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#555").text(n.status+" | "+n.pct+"%");
+    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");
+    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#4472C4").text("担当: "+res);
+  });
+  var z=d3.zoom().scaleExtent([0.1,4]).on("zoom",function(ev){g.attr("transform",ev.transform);});
+  svg.call(z);_z=z;_sv=svg;
+  if(gr.nodes.length){
+    var mx=Math.max.apply(null,gr.nodes.map(function(n){return n.gx;}))+NW+60;
+    var my=Math.max.apply(null,gr.nodes.map(function(n){return n.gy;}))+NH+60;
+    var sc=Math.min(1,(cW-40)/mx,(cH-40)/my);
+    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));
+  }
+}
+
+function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}
+window.addEventListener("resize",draw);
+draw();
+<\/script></body></html>`;
 }
 
 
@@ -2625,7 +2631,7 @@ function enhanceGanttTable(wrap) {
   }
 
   // ── Resize (table-layout:fixed → width on <th> is authoritative) ──
-  const resizeKey = 'pj_column_widths_gantt';
+  const resizeKey = 'pj_column_widths_gantt_fixed';
   const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
   const hasSavedW = Object.keys(savedW).length > 0;
 
