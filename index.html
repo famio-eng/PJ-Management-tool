@@ -1898,7 +1898,8 @@ function drawGantt() {
   }
 
   // ── LEFT TABLE: fixed columns (table-layout:fixed → truly resizable) ──
-  let L = '<table class="gantt-fixed-tbl" id="gantt-fixed-tbl"><thead><tr>';
+  const totalDefaultWidth = fixedCols.reduce((s, c) => s + c.w, 0);
+  let L = `<table class="gantt-fixed-tbl" id="gantt-fixed-tbl" style="width:${totalDefaultWidth}px"><thead><tr>`;
   fixedCols.forEach((c, i) => {
     L += `<th data-col-key="${c.key}" data-col-orig="${i}" style="width:${c.w}px">${c.label}</th>`;
   });
@@ -2635,6 +2636,11 @@ function enhanceGanttTable(wrap) {
   const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
   const hasSavedW = Object.keys(savedW).length > 0;
 
+  function syncFixedTblWidth() {
+    const total = fixedThs.reduce((s, t) => s + (t.offsetWidth || 0), 0);
+    if (total > 0) fixedTbl.style.width = total + 'px';
+  }
+
   fixedThs.forEach((th, i) => {
     th.style.position = 'relative';
     if (hasSavedW && savedW[i]) th.style.width = savedW[i];
@@ -2646,9 +2652,13 @@ function enhanceGanttTable(wrap) {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (ev) => { th.style.width = Math.max(20, startW + ev.clientX - startX) + 'px'; };
+      const onMove = (ev) => {
+        th.style.width = Math.max(20, startW + ev.clientX - startX) + 'px';
+        syncFixedTblWidth();
+      };
       const onUp = () => {
         handle.classList.remove('resizing');
+        syncFixedTblWidth();
         const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
         localStorage.setItem(resizeKey, JSON.stringify(ws));
         document.removeEventListener('mousemove', onMove);
@@ -2662,7 +2672,9 @@ function enhanceGanttTable(wrap) {
       fitSingleCol(th, fixedThs, fixedTbl, resizeKey);
     });
   });
-  if (!hasSavedW) {
+  if (hasSavedW) {
+    requestAnimationFrame(() => syncFixedTblWidth());
+  } else {
     requestAnimationFrame(() => {
       const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
       if (Object.keys(ws).length > 0) localStorage.setItem(resizeKey, JSON.stringify(ws));
