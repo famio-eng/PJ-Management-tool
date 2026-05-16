@@ -84,16 +84,35 @@ tr:hover td{background:#fafbff}
 body.dark .tl-label-bg{fill:#16213e}
 .tl-label-sep{stroke:#ddd;stroke-width:1}
 body.dark .tl-label-sep{stroke:#2a3a5c}
-/* Gantt */
-#gantt-wrap{overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.gantt-table{border-collapse:collapse;font-size:11px;min-width:100%}
-.gantt-table th,.gantt-table td{border:1px solid #e8e8e8;padding:0}
-.gantt-table .gt-cell{padding:4px 5px;white-space:nowrap}
-.gantt-table .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:4px 2px}
-.gantt-table .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px}
-.gantt-bar-cell{min-width:20px;padding:0;position:relative;height:26px}
-.gantt-bar-base{position:absolute;height:8px;top:4px;border-radius:1px;background:#4472C4;opacity:.8}
-.gantt-bar-actual{position:absolute;height:7px;top:14px;border-radius:1px;background:#70AD47;opacity:.9}
+/* Gantt split layout */
+#gantt-wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
+#gantt-divider{width:5px;flex-shrink:0;background:#c8d0e0;cursor:col-resize;transition:background .15s}
+#gantt-divider:hover,#gantt-divider.resizing{background:#4472C4}
+body.dark #gantt-divider{background:#3a3a5c}
+body.dark #gantt-divider:hover,body.dark #gantt-divider.resizing{background:#4472C4}
+.gantt-split-outer{display:flex;overflow:hidden}
+.gantt-left{flex:0 0 auto;min-width:50px;max-height:calc(100vh - 140px);overflow-x:auto;overflow-y:hidden}
+.gantt-left::-webkit-scrollbar{width:0;height:6px}
+.gantt-left::-webkit-scrollbar-thumb{background:#c8d0e0;border-radius:3px}
+.gantt-right{flex:1;max-height:calc(100vh - 140px);overflow:auto;min-width:80px;scrollbar-width:auto;scrollbar-color:#7a8fc0 #dde4f0}
+.gantt-right::-webkit-scrollbar{width:12px;height:12px}
+.gantt-right::-webkit-scrollbar-track{background:#dde4f0}
+.gantt-right::-webkit-scrollbar-thumb{background:#7a8fc0;border-radius:6px}
+.gantt-right::-webkit-scrollbar-corner{background:#dde4f0}
+/* Fixed columns table */
+.gantt-fixed-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed;border-right:none}
+.gantt-fixed-tbl th,.gantt-fixed-tbl td{border:1px solid #e8e8e8;padding:0;overflow:hidden}
+.gantt-fixed-tbl thead th{background:#f5f7fa;font-weight:600;font-size:10px;padding:4px 5px;height:52px;white-space:nowrap;position:sticky;top:0;z-index:3;vertical-align:middle;text-align:left}
+.gantt-fixed-tbl tbody td{height:26px;padding:3px 5px;white-space:nowrap;vertical-align:middle;box-sizing:border-box}
+/* Calendar table */
+.gantt-cal-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed}
+.gantt-cal-tbl th,.gantt-cal-tbl td{border:1px solid #e8e8e8;padding:0}
+.gantt-cal-tbl .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:2px;height:26px;width:22px;box-sizing:border-box}
+.gantt-cal-tbl .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px;height:26px;position:sticky;top:0;z-index:3}
+.gantt-cal-tbl .gt-header{position:sticky;top:26px;z-index:3}
+.gantt-bar-cell{width:22px;padding:0;position:relative;height:26px;box-sizing:border-box}
+.gantt-bar-base{position:absolute;height:14px;top:6px;border-radius:2px;background:#4472C4;opacity:.6}
+.gantt-bar-actual{position:absolute;height:14px;top:6px;border-radius:2px;background:#00B050;opacity:.85}
 .today-col{background:#FFF3E0 !important}
 .cp-row td:first-child{border-left:3px solid #e53935}
 .gantt-controls{display:flex;gap:8px;padding:10px;border-bottom:1px solid #eee;align-items:center}
@@ -186,9 +205,10 @@ body.dark #nw-panel{background:#16213e;border-color:#3a3a5c}
 body.dark #nw-svg-container{background:#1a1a2e}
 body.dark .nw-detail-label{color:#7a8a9a}
 body.dark .nw-detail-cell .nw-detail-label{color:#7a8a9a}
-body.dark .gantt-table th{background:#1e2a45;border-color:#3a3a5c}
-body.dark .gantt-table td{border-color:#2a2a4a}
+body.dark .gantt-fixed-tbl th,.dark .gantt-cal-tbl th{background:#1e2a45;border-color:#3a3a5c}
+body.dark .gantt-fixed-tbl td,.dark .gantt-cal-tbl td{border-color:#2a2a4a}
 body.dark .gantt-controls{border-color:#3a3a5c}
+body.dark .gantt-left{border-color:#3a3a5c}
 body.dark .gt-month{background:#243555;color:#90b8e0}
 body.dark .gt-header{background:#1e2a45;color:#b0bec5}
 body.dark textarea.comment-input{background:#1a1a2e;border-color:#3a3a5c;color:#e0e0e0}
@@ -216,12 +236,14 @@ body.dark .filter-btn.active{color:#90b8e0}
 th.drag-over{background:#d0e4f7!important;outline:2px dashed #4472C4;outline-offset:-2px}
 body.dark th.drag-over{background:#243555!important;outline-color:#90b8e0}
 /* Gantt dark mode - class-based overrides */
-.gantt-summary-row td { background: #f5f7fa; }
-body.dark .gantt-summary-row td { background: #1a2535 !important; }
-body.dark .gantt-table .today-bg { background: #2c2010 !important; }
-body.dark .gantt-table td.gt-cell { color: #d0d8e8; }
-/* Gantt: default cell and wrap background in dark mode */
-body.dark #gantt-wrap { background: #16213e; }
+.gantt-fixed-tbl .gantt-summary-row td{background:#f5f7fa}
+body.dark .gantt-fixed-tbl .gantt-summary-row td{background:#1a2535!important}
+body.dark .gantt-cal-tbl .today-bg{background:#2c2010!important}
+body.dark .gantt-fixed-tbl tbody td{color:#d0d8e8}
+body.dark #gantt-wrap,.dark .gantt-left,.dark .gantt-right{background:#16213e}
+body.dark .gantt-right{scrollbar-color:#4a5a8a #1a2540}
+body.dark .gantt-right::-webkit-scrollbar-track{background:#1a2540}
+body.dark .gantt-right::-webkit-scrollbar-thumb{background:#4a5a8a}
 body.dark .gantt-table td { background: #16213e; }
 /* Section headings in dark mode */
 body.dark .section h2 { color: #90b8e0; border-left-color: #4472C4; }
@@ -261,7 +283,7 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
     <a data-screen="dashboard" class="active">🏠 ダッシュボード</a>
     <a data-screen="timeline">📅 大日程タイムライン</a>
     <a data-screen="nw">🔗 NW図</a>
-    <a data-screen="gantt">📋 ガントチャート</a>
+    <a data-screen="gantt">📋 ガントチャート（WBS）</a>
     <a data-screen="meeting">📝 定例ビュー</a>
     <a data-screen="dept">👥 機能別進捗報告</a>
   </nav>
@@ -488,11 +510,11 @@ const state = {
   projectName: '医療機器開発PJ-A',
   reportDate: '2026-05-18',
   currentScreen: 'dashboard',
-  nwMode: 'cp',
+  nwMode: 'all',
   nwSelectedId: null,
   nwSubDepth: 2,
   nwDeptFilter: 'all',
-  ganttWeeks: 13,
+  ganttPeriod: '3m',
   deptTab: 'Pj-L',
   comments: {},
   actions: [],
@@ -616,7 +638,7 @@ function navigate(screen) {
   });
   const titles = {
     dashboard:'ダッシュボード', timeline:'大日程タイムライン',
-    nw:'NW図（タスク依存関係）', gantt:'ガントチャート（中・小日程）',
+    nw:'NW図（タスク依存関係）', gantt:'ガントチャート（WBS）',
     meeting:'定例ビュー', dept:'機能別進捗報告'
   };
   document.getElementById('topbar-title').textContent = titles[screen] || screen;
@@ -1644,160 +1666,216 @@ window.showNWContextMenu = function(event, id) {
   }, 10);
 };
 
-// NW subgraph — opens in a new browser window
-window.showNWSubPanel = function(id) {
+window.closeNWSubPanel = function() { /* new-window approach: no-op */ };
+window.closeNWSubModal = window.closeNWSubPanel;
+
+// D3 source cache — fetched once, embedded inline in subgraph popup to avoid CDN/CSP issues
+let _d3SourceCache = null;
+async function _fetchD3Source() {
+  if (_d3SourceCache) return _d3SourceCache;
+  try {
+    const r = await fetch('https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js');
+    if (r.ok) _d3SourceCache = await r.text();
+  } catch(e) {}
+  return _d3SourceCache;
+}
+
+// NW subgraph — Blob URL + inline D3 + embedded data (no CDN, no window.opener)
+window.showNWSubPanel = async function(id) {
   if (!id) return;
   const depth = state.nwSubPanelDepth || 2;
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
 
-  // Serialize task data; escape closing-script tags to prevent HTML injection
-  const tasksJson = JSON.stringify(state.tasks).replace(/<\/script/gi, '<\\/script');
+  const d3src = await _fetchD3Source();
+  if (!d3src) {
+    alert('D3ライブラリの取得に失敗しました。インターネット接続を確認してページをリロードしてください。');
+    return;
+  }
 
-  const html = buildSubgraphWindowHTML(id, title, depth, tasksJson);
+  // Embed data as JSON literal; escape </ to prevent HTML parser from closing the script tag early
+  const dataJson = JSON.stringify({ tasks: state.tasks, focusId: id, title: title, depth: depth, isDark: document.body.classList.contains('dark') })
+    .replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
-  const win = window.open('', 'nw_sub_' + id,
+  const html = buildSubgraphWindowHTML(d3src, dataJson);
+  const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, '_blank',
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
-  if (!win) { alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  if (!win) { URL.revokeObjectURL(blobUrl); alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
   win.focus();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 };
 
-window.closeNWSubPanel = function() { /* no-op: new-window approach */ };
+function buildSubgraphWindowHTML(d3src, dataJson) {
+  // D3 is inlined (no CDN dependency).
+  // Data is embedded as a JSON literal (no window.opener dependency).
+  // All functions are at top level so HTML onclick/oninput attrs can call them.
+  return `<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>
+<script>${d3src}<\/script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}
+#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}
+#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}
+#ctnr:active{cursor:grabbing}
+svg{display:block;width:100%;height:100%}
+.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}
+.btn:hover{background:#e8eef8}
+label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}
+#dv{font-size:12px;font-weight:700;min-width:14px}
+#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}
+body.dark{background:#1a1a2e;color:#e0e0e0}
+body.dark #hdr{background:#16213e;border-color:#3a3a5c;color:#e0e0e0}
+body.dark #hdr h2{color:#90b8e0}
+body.dark #ctnr{background:#0f1923}
+body.dark svg{background:#0f1923}
+body.dark .btn{background:#1e2a45;border-color:#3a3a5c;color:#ccc}
+body.dark .btn:hover{background:#243555}
+body.dark label{color:#aaa}
+body.dark #dv{color:#ccc}
+</style></head><body>
+<div id="hdr">
+  <h2>サブグラフ: <span id="ft"></span></h2>
+  <label>深さ:
+    <input type="range" id="ds" min="1" max="5" value="2" style="width:80px" oninput="dep=+this.value;document.getElementById('dv').textContent=this.value;draw()">
+    <span id="dv">2</span>
+  </label>
+  <button class="btn" onclick="resetZ()">ズームリセット</button>
+  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>
+</div>
+<div id="ctnr"><svg id="sv"></svg></div>
+<div id="tip"></div>
+<script>
+var _data = ${dataJson};
+var ALL = _data.tasks || [], fid = _data.focusId || 0, dep = _data.depth || 2, _z, _sv;
+if (_data.isDark) document.body.classList.add('dark');
+document.title = "サブグラフ: " + (_data.title || fid);
+document.getElementById("ft").textContent = _data.title || fid;
+document.getElementById("ds").value = dep;
+document.getElementById("dv").textContent = dep;
 
-function buildSubgraphWindowHTML(focusId, focusTitle, initDepth, tasksJson) {
-  return '<!DOCTYPE html>\n' +
-'<html lang="ja"><head><meta charset="UTF-8">' +
-'<title>サブグラフ: ' + focusTitle + '</title>' +
-'<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\\/script>' +
-'<style>' +
-'*{box-sizing:border-box;margin:0;padding:0}' +
-'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}' +
-'#hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}' +
-'#hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}' +
-'#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}' +
-'#ctnr:active{cursor:grabbing}' +
-'svg{width:100%;height:100%}' +
-'.btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}' +
-'.btn:hover{background:#e8eef8}' +
-'label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}' +
-'#dv{font-size:12px;font-weight:700;min-width:14px}' +
-'#tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}' +
-'</style></head><body>' +
-'<div id="hdr">' +
-'  <h2>サブグラフ: <span id="ft">' + focusTitle + '</span></h2>' +
-'  <label>深さ:' +
-'    <input type="range" id="ds" min="1" max="5" value="' + initDepth + '" style="width:80px"' +
-'      oninput="dep=+this.value;document.getElementById(\'dv\').textContent=this.value;draw()">' +
-'    <span id="dv">' + initDepth + '</span>' +
-'  </label>' +
-'  <button class="btn" onclick="resetZ()">ズームリセット</button>' +
-'  <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>' +
-'</div>' +
-'<div id="ctnr"><svg id="sv"></svg></div>' +
-'<div id="tip"></div>' +
-'<script>' +
-'const ALL=' + tasksJson + ';' +
-'let fid=' + focusId + ', dep=' + initDepth + ', _z, _sv;' +
-'function bG(tasks){' +
-'  const ns=tasks.map(t=>({...t})), ids=new Set(ns.map(n=>n.id)), es=[];' +
-'  ns.forEach(n=>{if(!n.pred)return;n.pred.split(",").map(s=>parseInt(s.trim())).filter(p=>ids.has(p)).forEach(p=>es.push({source:p,target:n.id}));});' +
-'  return{nodes:ns,edges:es};' +
-'}' +
-'function cL(nodes,edges){' +
-'  if(!nodes.length)return;' +
-'  const ids=new Set(nodes.map(n=>n.id)),succ={},ind={};' +
-'  nodes.forEach(n=>{succ[n.id]=[];ind[n.id]=0;});' +
-'  edges.forEach(e=>{if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});' +
-'  const dep2={},q=nodes.filter(n=>ind[n.id]===0).map(n=>n.id);' +
-'  q.forEach(id=>{dep2[id]=0;});' +
-'  const vis=new Set(q);' +
-'  while(q.length){const id=q.shift();succ[id].forEach(sid=>{dep2[sid]=Math.max(dep2[sid]||0,(dep2[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}' +
-'  const bd={};' +
-'  nodes.forEach(n=>{const d=dep2[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});' +
-'  const NW=190,NH=96,CG=60,RG=14;' +
-'  const ch={};Object.entries(bd).forEach(([d,c])=>{ch[d]=c.length*(NH+RG)-RG;});' +
-'  const mh=Math.max(...Object.values(ch));' +
-'  nodes.forEach(n=>{const d=dep2[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});' +
-'}' +
-'function draw(){' +
-'  const reg=ALL.filter(t=>!t.isSummary&&t.active!=="いいえ");' +
-'  const sel=new Set([fid]);const ae=[];' +
-'  reg.forEach(t=>{if(!t.pred)return;t.pred.split(",").map(s=>parseInt(s.trim())).forEach(p=>ae.push({source:p,target:t.id}));});' +
-'  for(let i=0;i<dep;i++){const add=new Set();ae.forEach(e=>{if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(id=>sel.add(id));}' +
-'  const sub=reg.filter(t=>sel.has(t.id));' +
-'  const{nodes,edges}=bG(sub);cL(nodes,edges);' +
-'  const NW=190,NH=96;' +
-'  const ct=document.getElementById("ctnr");' +
-'  const cW=ct.clientWidth,cH=ct.clientHeight;' +
-'  const svg=d3.select("#sv").attr("width",cW).attr("height",cH);' +
-'  svg.selectAll("*").remove();' +
-'  const defs=svg.append("defs");' +
-'  ["normal","cp"].forEach(type=>{' +
-'    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")' +
-'      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");' +
-'  });' +
-'  const g=svg.append("g");' +
-'  const nm={};nodes.forEach(n=>{nm[n.id]=n;});' +
-'  edges.forEach(e=>{' +
-'    const s=nm[e.source],t=nm[e.target];if(!s||!t)return;' +
-'    const cp=s.critical==="はい"&&t.critical==="はい";' +
-'    const sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;' +
-'    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)' +
-'      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)' +
-'      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);' +
-'  });' +
-'  nodes.forEach(n=>{' +
-'    const ic=n.status==="Close";' +
-'    const bg=ic?"#606060":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");' +
-'    const bd=ic?"#404040":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");' +
-'    const icp=!ic&&n.critical==="はい",ifo=n.id===fid;' +
-'    const tc=ic?"#d0d0d0":"#222";' +
-'    const ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")' +
-'      .on("click",function(){fid=n.id;var t=ALL.find(x=>x.id===n.id);document.getElementById("ft").textContent=t?t.name:n.id;draw();})' +
-'      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})' +
-'      .on("mouseout",function(){document.getElementById("tip").style.display="none";});' +
-'    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg)' +
-'      .attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);' +
-'    if(icp){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}' +
-'    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#404040":"#888").text(n.wbs);' +
-'    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";' +
-'    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);' +
-'    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);' +
-'    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#666":"#ddd").attr("stroke-width",1);' +
-'    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#303030":"#555").text(n.status+" | "+n.pct+"%");' +
-'    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");' +
-'    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#404040":"#4472C4").text("担当: "+res);' +
-'  });' +
-'  const z=d3.zoom().scaleExtent([0.1,4]).on("zoom",ev=>g.attr("transform",ev.transform));' +
-'  svg.call(z);_z=z;_sv=svg;' +
-'  if(nodes.length){' +
-'    const mx=Math.max(...nodes.map(n=>n.gx))+NW+60,my=Math.max(...nodes.map(n=>n.gy))+NH+60;' +
-'    const sc=Math.min(1,(cW-40)/mx,(cH-40)/my);' +
-'    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));' +
-'  }' +
-'}' +
-'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}' +
-'window.addEventListener("resize",draw);draw();' +
-'<\/script></body></html>';
+function buildGraph(tasks) {
+  var ns = tasks.map(function(t){return Object.assign({},t);}),
+      ids = new Set(ns.map(function(n){return n.id;})), es = [];
+  ns.forEach(function(n){
+    if(!n.pred)return;
+    n.pred.split(",").map(function(s){return parseInt(s.trim());})
+      .filter(function(p){return ids.has(p);})
+      .forEach(function(p){es.push({source:p,target:n.id});});
+  });
+  return {nodes:ns,edges:es};
 }
+
+function layout(nodes,edges) {
+  if(!nodes.length)return;
+  var ids=new Set(nodes.map(function(n){return n.id;})),succ={},ind={};
+  nodes.forEach(function(n){succ[n.id]=[];ind[n.id]=0;});
+  edges.forEach(function(e){if(ids.has(e.source)&&ids.has(e.target)){succ[e.source].push(e.target);ind[e.target]++;}});
+  var dp={},q=nodes.filter(function(n){return ind[n.id]===0;}).map(function(n){return n.id;});
+  q.forEach(function(id){dp[id]=0;});
+  var vis=new Set(q);
+  while(q.length){var id=q.shift();succ[id].forEach(function(sid){dp[sid]=Math.max(dp[sid]||0,(dp[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}
+  var bd={},NW=190,NH=96,CG=60,RG=14;
+  nodes.forEach(function(n){var d=dp[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});
+  var ch={};Object.keys(bd).forEach(function(d){ch[d]=bd[d].length*(NH+RG)-RG;});
+  var mh=Math.max.apply(null,Object.values(ch));
+  nodes.forEach(function(n){var d=dp[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});
+}
+
+function draw() {
+  var ct=document.getElementById("ctnr");
+  var cW=ct.clientWidth||window.innerWidth||900, cH=ct.clientHeight||window.innerHeight||600;
+  var NW=190,NH=96;
+  var reg=ALL.filter(function(t){return t.active!=="いいえ";});
+  var sel=new Set([fid]),ae=[];
+  reg.forEach(function(t){if(!t.pred)return;t.pred.split(",").map(function(s){return parseInt(s.trim());}).forEach(function(p){ae.push({source:p,target:t.id});});});
+  for(var i=0;i<dep;i++){var add=new Set();ae.forEach(function(e){if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(function(id){sel.add(id);});}
+  var sub=reg.filter(function(t){return sel.has(t.id);});
+  var svg=d3.select("#sv").attr("width",cW).attr("height",cH);
+  svg.selectAll("*").remove();
+  if(!sub.length){svg.append("text").attr("x",cW/2).attr("y",cH/2).attr("text-anchor","middle").attr("font-size","14px").attr("fill","#888").text("関連タスクが見つかりません（深さを増やしてください）");return;}
+  var gr=buildGraph(sub);layout(gr.nodes,gr.edges);
+  var defs=svg.append("defs");
+  ["normal","cp"].forEach(function(type){
+    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")
+      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");
+  });
+  var g=svg.append("g");
+  var nm={};gr.nodes.forEach(function(n){nm[n.id]=n;});
+  gr.edges.forEach(function(e){
+    var s=nm[e.source],t=nm[e.target];if(!s||!t)return;
+    var cp=s.critical==="はい"&&t.critical==="はい";
+    var sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;
+    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)
+      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)
+      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);
+  });
+  gr.nodes.forEach(function(n){
+    var ic=n.status==="Close";
+    var bg=ic?"#D9D9D9":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");
+    var bd=ic?"#AAAAAA":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");
+    var icp=!ic&&n.critical==="はい",ifo=n.id===fid,tc=ic?"#888":"#222";
+    var ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")
+      .on("click",function(){fid=n.id;var tk=ALL.find(function(x){return x.id===n.id;});document.getElementById("ft").textContent=tk?tk.name:n.id;draw();})
+      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})
+      .on("mouseout",function(){document.getElementById("tip").style.display="none";});
+    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg).attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);
+    if(icp&&!ic){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}
+    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#aaa":"#888").text(n.wbs);
+    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…":""):"";
+    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);
+    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);
+    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#bbb":"#ddd").attr("stroke-width",1);
+    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#555").text(n.status+" | "+n.pct+"%");
+    var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");
+    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#4472C4").text("担当: "+res);
+  });
+  var z=d3.zoom().scaleExtent([0.1,4]).on("zoom",function(ev){g.attr("transform",ev.transform);});
+  svg.call(z);_z=z;_sv=svg;
+  if(gr.nodes.length){
+    var mx=Math.max.apply(null,gr.nodes.map(function(n){return n.gx;}))+NW+60;
+    var my=Math.max.apply(null,gr.nodes.map(function(n){return n.gy;}))+NH+60;
+    var sc=Math.min(1,(cW-40)/mx,(cH-40)/my);
+    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));
+  }
+}
+
+function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}
+window.addEventListener("resize",draw);
+draw();
+<\/script></body></html>`;
+}
+
+
 
 // =====================================================================
 // SCREEN 4: GANTT CHART
 // =====================================================================
+const GANTT_PERIODS = [
+  {key:'2w', label:'2週'},
+  {key:'1m', label:'1ヶ月'},
+  {key:'3m', label:'3ヶ月'},
+  {key:'6m', label:'6ヶ月'},
+];
+// Default column width (px) per period mode
+const GANTT_COL_W = {'2w':52, '1m':70, '3m':100, '6m':130};
+
 function renderGantt() {
-  const weekOptions = [2, 4, 13, 26, 52];
   document.getElementById('content').innerHTML = `
     <div class="section" style="padding:0">
       <div class="gantt-controls">
-        <span style="font-size:12px;color:#666">表示週数:</span>
-        ${weekOptions.map(w => `<button class="btn btn-sm ${state.ganttWeeks===w?'btn-primary':'btn-outline'}" onclick="setGanttWeeks(${w})">${w}週</button>`).join('')}
+        <span style="font-size:12px;color:#666">列の期間:</span>
+        ${GANTT_PERIODS.map(p => `<button class="btn btn-sm ${state.ganttPeriod===p.key?'btn-primary':'btn-outline'}" onclick="setGanttPeriod('${p.key}')">${p.label}</button>`).join('')}
+        <span style="width:8px"></span>
+        <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="タスク情報列の幅をコンテンツに合わせて最適化">情報列幅調整</button>
+        <button class="btn btn-sm btn-outline gantt-cal-fit-btn" title="プロジェクト全期間がカレンダー表示領域に収まるよう列幅を調整">全期間表示</button>
         <span style="flex:1"></span>
         <span style="font-size:11px;color:#888">
           <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
-          <span style="display:inline-block;width:12px;height:6px;background:#70AD47;border-radius:1px;opacity:.9;vertical-align:middle;margin-right:3px"></span>実績
+          <span style="display:inline-block;width:12px;height:6px;background:#00B050;border-radius:1px;opacity:.85;vertical-align:middle;margin-right:3px"></span>実績
         </span>
       </div>
       <div id="gantt-wrap"></div>
@@ -1805,7 +1883,7 @@ function renderGantt() {
   drawGantt();
 }
 
-window.setGanttWeeks = function(w) { state.ganttWeeks = w; renderGantt(); };
+window.setGanttPeriod = function(p) { state.ganttPeriod = p; renderGantt(); };
 
 function getMonday(date) {
   const d = new Date(date);
@@ -1827,142 +1905,263 @@ function getWeekKey(dateStr) {
   return `${start.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
 }
 
+// ── Calendar period helpers ──
+function _periodFloor(mode, d) {
+  if (mode === '2w') {
+    // Align to biweekly boundary from a fixed reference Monday (2015-01-05)
+    const monday = getMonday(d);
+    const refMs = new Date(2015, 0, 5).getTime();
+    const weeks = Math.floor((monday.getTime() - refMs) / (7 * 86400000));
+    return new Date(refMs + Math.floor(weeks / 2) * 14 * 86400000);
+  }
+  if (mode === '1m') return new Date(d.getFullYear(), d.getMonth(), 1);
+  if (mode === '3m') return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  return new Date(d.getFullYear(), d.getMonth() < 6 ? 0 : 6, 1); // 6m
+}
+
+function _periodNext(mode, start) {
+  if (mode === '2w') return new Date(start.getTime() + 14 * 86400000);
+  if (mode === '1m') return new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  if (mode === '3m') return new Date(start.getFullYear(), start.getMonth() + 3, 1);
+  return new Date(start.getFullYear(), start.getMonth() + 6, 1); // 6m
+}
+
+function _periodLabel1(mode, p) {
+  const s = p.start;
+  if (mode === '2w') return `${s.getFullYear()}/${String(s.getMonth()+1).padStart(2,'0')}`;
+  return `${s.getFullYear()}年`;
+}
+
+function _periodLabel2(mode, p) {
+  const s = p.start;
+  if (mode === '2w') return `${s.getMonth()+1}/${s.getDate()}`;
+  if (mode === '1m') return `${s.getMonth()+1}月`;
+  if (mode === '3m') return `Q${Math.floor(s.getMonth()/3)+1}`;
+  return s.getMonth() === 0 ? '上半期' : '下半期';
+}
+
+function generateCalendarPeriods(mode, tasks) {
+  const dates = tasks.flatMap(t => [toDate(t.bstart), toDate(t.bend)]).filter(Boolean);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const pMin = dates.length ? new Date(Math.min(...dates.map(d => +d))) : now;
+  const pMax = dates.length ? new Date(Math.max(...dates.map(d => +d))) : new Date(now.getFullYear()+1, now.getMonth(), now.getDate());
+  let cur = _periodFloor(mode, pMin);
+  const stop = _periodNext(mode, _periodFloor(mode, pMax));
+  const periods = [];
+  while (+cur < +stop && periods.length < 500) {
+    const next = _periodNext(mode, cur);
+    periods.push({ start: new Date(+cur), endExclusive: new Date(+next) });
+    cur = next;
+  }
+  return periods;
+}
+
 function drawGantt() {
   const wrap = document.getElementById('gantt-wrap');
   if (!wrap) return;
-  const rd = toDate(state.reportDate);
-  const monday = getMonday(rd);
-  const weeks = state.ganttWeeks;
-  const startWeek = new Date(monday.getTime() - Math.floor(weeks * 0.3) * 7 * 86400000);
+  const mode = state.ganttPeriod || '3m';
+  const today = toDate(state.reportDate) || new Date();
+  const colW = GANTT_COL_W[mode] || 70;
 
-  // Generate week headers
-  const weekDates = [];
-  for (let i = 0; i < weeks; i++) {
-    const w = new Date(startWeek.getTime() + i * 7 * 86400000);
-    weekDates.push(w);
-  }
+  const periods = generateCalendarPeriods(mode, state.tasks);
 
-  // Group weeks by month for header
-  const monthGroups = [];
-  let curMonth = null, curStart = 0;
-  weekDates.forEach((w, i) => {
-    const m = `${w.getFullYear()}/${String(w.getMonth() + 1).padStart(2,'0')}`;
-    if (m !== curMonth) {
-      if (curMonth !== null) monthGroups.push({label: curMonth, count: i - curStart});
-      curMonth = m;
-      curStart = i;
-    }
+  // Build row1 groups (year or month grouping for header row1)
+  const groups = [];
+  let curG = null;
+  periods.forEach(p => {
+    const lbl = _periodLabel1(mode, p);
+    if (lbl !== (curG && curG.label)) { if (curG) groups.push(curG); curG = {label:lbl, count:1}; }
+    else curG.count++;
   });
-  if (curMonth) monthGroups.push({label: curMonth, count: weekDates.length - curStart});
+  if (curG) groups.push(curG);
 
-  // Fixed columns
   let fixedCols = [
-    {key:'wbs',label:'WBS',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当',w:80},
-    {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW',w:28}
+    {key:'id',label:'ID',w:40},{key:'wbs',label:'WBS番号',w:70},{key:'name',label:'タスク名',w:200},
+    {key:'resource',label:'担当部門',w:80},{key:'pct',label:'達成率',w:65},
+    {key:'status',label:'ステータス',w:70},{key:'nw',label:'NW図',w:32}
   ];
 
-  // Visible tasks (apply collapse)
   const visibleTasks = [];
   const hiddenParents = new Set();
   state.tasks.forEach(t => {
-    // Check if any parent is collapsed
-    const parentWbs = t.wbs.split('.').slice(0, -1).join('.');
     const isHidden = [...hiddenParents].some(hw => t.wbs.startsWith(hw + '.'));
     if (!isHidden) {
       visibleTasks.push(t);
-      if (t.isSummary && state.collapsedRows.has(t.id)) {
-        hiddenParents.add(t.wbs);
-      }
+      if (t.isSummary && state.collapsedRows.has(t.id)) hiddenParents.add(t.wbs);
     }
   });
 
-  // Apply saved column order
-  const _ganttColOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
-  if (_ganttColOrder && _ganttColOrder.length === fixedCols.length) {
-    fixedCols = _ganttColOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
-    if (fixedCols.length !== _ganttColOrder.length) fixedCols = [{key:'wbs',label:'WBS'},{key:'name',label:'タスク名'},{key:'resource',label:'担当'},{key:'pct',label:'達成率'},{key:'status',label:'ステータス'},{key:'nw',label:'NW'}];
+  const savedOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
+  if (savedOrder && savedOrder.length === fixedCols.length) {
+    const ordered = savedOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
+    if (ordered.length === fixedCols.length) fixedCols = ordered;
   }
 
-  let html = '<table class="gantt-table"><thead>';
-  // Month row
-  html += '<tr>';
-  fixedCols.forEach(c => html += `<th class="gt-cell" data-col-key="${c.key}" style="white-space:nowrap" rowspan="2">${c.label}</th>`);
-  monthGroups.forEach(mg => html += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
-  html += '</tr>';
-  // Week row
-  html += '<tr>';
-  weekDates.forEach(w => {
-    const isToday = w <= rd && new Date(w.getTime() + 6 * 86400000) >= rd;
-    html += `<th class="gt-header${isToday?' today-col':''}" style="min-width:22px;width:22px">${w.getDate()}</th>`;
+  // ── LEFT TABLE: fixed columns ──
+  const totalDefaultWidth = fixedCols.reduce((s, c) => s + c.w, 0);
+  let L = `<table class="gantt-fixed-tbl" id="gantt-fixed-tbl" style="width:${totalDefaultWidth}px"><thead><tr>`;
+  fixedCols.forEach((c, i) => {
+    L += `<th data-col-key="${c.key}" data-col-orig="${i}" style="width:${c.w}px">${c.label}</th>`;
   });
-  html += '</tr></thead><tbody>';
-
+  L += '</tr></thead><tbody>';
   visibleTasks.forEach(task => {
     const isCP = task.critical === 'はい' && !task.isSummary;
     const isSummary = task.isSummary;
     const isCollapsed = state.collapsedRows.has(task.id);
-    const indent = task.level === 1 ? 'il1' : task.level === 2 ? 'il2' : task.level === 3 ? 'il3' : 'il4';
-    const rowBg = '';
-
-    html += `<tr class="${isCP ? 'cp-row' : ''}${isSummary ? ' gantt-summary-row' : ''}">`;
+    const indent = {1:'il1',2:'il2',3:'il3'}[task.level] || 'il4';
+    L += `<tr class="${isCP?'cp-row':''}${isSummary?' gantt-summary-row':''}" data-task-id="${task.id}">`;
     fixedCols.forEach(c => {
       let val = '';
-      if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
+      if (c.key === 'id') val = `<span style="font-size:10px;color:#aaa">${task.id}</span>`;
+      else if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
       else if (c.key === 'name') {
-        const toggle = isSummary ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>` : '<span style="display:inline-block;width:18px"></span>';
-        val = `<div class="${indent}" style="white-space:nowrap;overflow:hidden;max-width:180px;text-overflow:ellipsis">${toggle}${task.name}</div>`;
+        const tog = isSummary
+          ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>`
+          : '<span style="display:inline-block;width:18px"></span>';
+        val = `<div class="${indent}">${tog}${task.name}</div>`;
       }
       else if (c.key === 'resource') val = `<span style="font-size:10px;color:#888">${task.resource||''}</span>`;
-      else if (c.key === 'pct') val = `${pctBar(task.pct)}`;
+      else if (c.key === 'pct') val = pctBar(task.pct);
       else if (c.key === 'status') val = statusBadge(task.status);
-      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="jumpToNW(${task.id})">🔗</span>`;
-      const stickyStyle = ['wbs','name','resource','pct','status','nw'].includes(c.key) ?
-        'position:sticky;left:0;z-index:1;' : '';
-      html += `<td class="gt-cell" style="${stickyStyle}white-space:nowrap">${val}</td>`;
+      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="showNWSubPanel(${task.id})" title="サブグラフ">🔗</span>`;
+      L += `<td class="gft-cell">${val}</td>`;
     });
+    L += '</tr>';
+  });
+  L += '</tbody></table>';
 
+  // ── RIGHT TABLE: period-based calendar ──
+  const calTotalW = periods.length * colW;
+  let R = `<table class="gantt-cal-tbl" id="gantt-cal-tbl" style="width:${calTotalW}px;table-layout:fixed"><thead><tr>`;
+  groups.forEach(g => R += `<th class="gt-month" colspan="${g.count}" style="width:${g.count*colW}px">${g.label}</th>`);
+  R += '</tr><tr>';
+  periods.forEach(p => {
+    const isTodayCol = +today >= +p.start && +today < +p.endExclusive;
+    R += `<th class="gt-header${isTodayCol?' today-col':''}" style="width:${colW}px">${_periodLabel2(mode, p)}</th>`;
+  });
+  R += '</tr></thead><tbody>';
+  visibleTasks.forEach(task => {
+    const isCP = task.critical === 'はい' && !task.isSummary;
+    const isSummary = task.isSummary;
     const bstart = toDate(task.bstart), bend = toDate(task.bend);
     const astart = toDate(task.astart), aend = toDate(task.aend);
-    const today = toDate(state.reportDate);
-
-    weekDates.forEach(w => {
-      const wEnd = new Date(w.getTime() + 6 * 86400000);
-      const isToday = w <= today && wEnd >= today;
-      const bg = '';
-      const todayClass = isToday ? ' today-bg' : '';
-
-      // Check overlaps
-      const baseOverlap = bstart && bend && bstart <= wEnd && bend >= w;
-      const actualOverlap = astart && (aend || today) && astart <= wEnd && (aend || today) >= w;
-
-      let cellContent = '<div style="position:relative;height:22px">';
-      if (baseOverlap) {
-        // Calculate left% and width% within the week
-        const clampedStart = Math.max(bstart, w);
-        const clampedEnd = Math.min(bend, wEnd);
-        const weekMs = 7 * 86400000;
-        const leftPct = (clampedStart - w) / weekMs * 100;
-        const widPct = (clampedEnd - clampedStart) / weekMs * 100;
-        const color = isSummary ? '#2F5597' : '#4472C4';
-        cellContent += `<div class="gantt-bar-base" style="left:${leftPct}%;width:${widPct}%;background:${color}"></div>`;
+    R += `<tr class="${isCP?'cp-row':''}${isSummary?' gantt-summary-row':''}" data-task-id="${task.id}">`;
+    periods.forEach(p => {
+      const pDur = +p.endExclusive - +p.start;
+      const isTodayCell = +today >= +p.start && +today < +p.endExclusive;
+      const baseOvlp = bstart && bend && +bstart < +p.endExclusive && +bend >= +p.start;
+      const actEff   = aend || today;
+      const actOvlp  = astart && +astart < +p.endExclusive && +actEff >= +p.start;
+      let cc = '<div style="position:relative;height:22px">';
+      if (baseOvlp) {
+        const cs = Math.max(+bstart, +p.start);
+        const ce = Math.min(+bend + 86400000, +p.endExclusive);
+        cc += `<div class="gantt-bar-base" style="left:${(cs-+p.start)/pDur*100}%;width:${(ce-cs)/pDur*100}%;background:${isSummary?'#2F5597':'#4472C4'}"></div>`;
       }
-      if (actualOverlap) {
-        const effectiveEnd = aend || today;
-        const clampedStart = Math.max(astart, w);
-        const clampedEnd = Math.min(effectiveEnd, wEnd);
-        const weekMs = 7 * 86400000;
-        const leftPct = (clampedStart - w) / weekMs * 100;
-        const widPct = (clampedEnd - clampedStart) / weekMs * 100;
-        cellContent += `<div class="gantt-bar-actual" style="left:${leftPct}%;width:${widPct}%"></div>`;
+      if (actOvlp) {
+        const cs = Math.max(+astart, +p.start);
+        const ce = Math.min(+actEff + 86400000, +p.endExclusive);
+        cc += `<div class="gantt-bar-actual" style="left:${(cs-+p.start)/pDur*100}%;width:${(ce-cs)/pDur*100}%"></div>`;
       }
-      cellContent += '</div>';
-      html += `<td class="gantt-bar-cell${todayClass}">${cellContent}</td>`;
+      cc += '</div>';
+      R += `<td class="gantt-bar-cell${isTodayCell?' today-bg':''}" style="width:${colW}px">${cc}</td>`;
     });
-    html += '</tr>';
+    R += '</tr>';
+  });
+  R += '</tbody></table>';
+
+  wrap.innerHTML = `<div class="gantt-split-outer"><div class="gantt-left" id="gantt-left">${L}</div><div id="gantt-divider"></div><div class="gantt-right" id="gantt-right">${R}</div></div>`;
+
+  const gRight = document.getElementById('gantt-right');
+  const gLeft  = document.getElementById('gantt-left');
+  const splitOuter = wrap.querySelector('.gantt-split-outer');
+
+  // Vertical scroll sync
+  if (gRight && gLeft) gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+
+  // ── Left panel initial width ──
+  requestAnimationFrame(() => {
+    if (!gLeft || !gRight || !splitOuter) return;
+    const fixedTbl = document.getElementById('gantt-fixed-tbl');
+    const leftNaturalW = fixedTbl ? fixedTbl.offsetWidth : totalDefaultWidth;
+    const savedLeftW = localStorage.getItem('pj_gantt_left_w');
+    if (savedLeftW) {
+      gLeft.style.width = savedLeftW;
+    } else {
+      gLeft.style.width = leftNaturalW + 'px';
+    }
   });
 
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
+  // ── Divider drag: controls LEFT panel width (true split pane) ──
+  const divider = document.getElementById('gantt-divider');
+  if (divider && gLeft && gRight) {
+    divider.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      divider.classList.add('resizing');
+      const startX = e.clientX, startLeftW = gLeft.offsetWidth;
+      // Capture initial column widths for proportional scaling
+      const _ftbl = document.getElementById('gantt-fixed-tbl');
+      const startColWidths = _ftbl
+        ? [..._ftbl.querySelectorAll('thead th')].map(th => parseFloat(th.style.width) || th.offsetWidth)
+        : [];
+      const onMove = (ev) => {
+        const delta = ev.clientX - startX;
+        const outerW = splitOuter.offsetWidth;
+        const maxLeft = Math.max(50, outerW - 80 - 5);
+        const newLeftW = Math.min(maxLeft, Math.max(50, startLeftW + delta));
+        gLeft.style.width = newLeftW + 'px';
+        // Scale info columns proportionally with the panel
+        if (startLeftW > 0 && startColWidths.length) {
+          const ratio = newLeftW / startLeftW;
+          const fixedTbl = document.getElementById('gantt-fixed-tbl');
+          const ths = fixedTbl ? [...fixedTbl.querySelectorAll('thead th')] : [];
+          let totalW = 0;
+          ths.forEach((th, i) => {
+            const w = Math.max(20, Math.round((startColWidths[i] || 80) * ratio));
+            th.style.width = w + 'px';
+            totalW += w;
+          });
+          if (fixedTbl && totalW > 0) fixedTbl.style.width = totalW + 'px';
+        }
+      };
+      const onUp = () => {
+        divider.classList.remove('resizing');
+        // Persist new column widths
+        const fixedTbl = document.getElementById('gantt-fixed-tbl');
+        if (fixedTbl) {
+          const ws = {};
+          [...fixedTbl.querySelectorAll('thead th')].forEach((t, i) => { ws[i] = t.offsetWidth + 'px'; });
+          localStorage.setItem('pj_column_widths_gantt_fixed', JSON.stringify(ws));
+        }
+        localStorage.setItem('pj_gantt_left_w', gLeft.style.width);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  // ── Cal fit button: fit all periods in the right panel ──
+  const calFitBtn = (wrap.parentElement || document).querySelector('.gantt-cal-fit-btn');
+  if (calFitBtn) {
+    calFitBtn.onclick = () => {
+      const calTbl = document.getElementById('gantt-cal-tbl');
+      if (!calTbl || !gRight) return;
+      const row2Ths = [...calTbl.querySelectorAll('thead tr:last-child th')];
+      if (!row2Ths.length) return;
+      const newW = Math.max(10, Math.floor(gRight.offsetWidth / row2Ths.length));
+      row2Ths.forEach(th => { th.style.width = newW + 'px'; });
+      const row1Ths = [...calTbl.querySelectorAll('thead tr:first-child th')];
+      row1Ths.forEach(th => { const span = parseInt(th.getAttribute('colspan')) || 1; th.style.width = span * newW + 'px'; });
+      calTbl.style.width = newW * row2Ths.length + 'px';
+      // Also sync body cells
+      [...calTbl.querySelectorAll('tbody td.gantt-bar-cell')].forEach((td, i) => {
+        td.style.width = newW + 'px';
+      });
+    };
+  }
+
   enhanceGanttTable(wrap);
 }
 
@@ -1970,6 +2169,13 @@ window.toggleGanttRow = function(id) {
   if (state.collapsedRows.has(id)) state.collapsedRows.delete(id);
   else state.collapsedRows.add(id);
   drawGantt();
+};
+
+// =====================================================================
+// GANTT: SUBGRAPH WINDOW (4-4) — reuses showNWSubPanel
+// =====================================================================
+window.showGanttSubgraph = function(id) {
+  showNWSubPanel(id);
 };
 
 // =====================================================================
@@ -2004,7 +2210,7 @@ function renderMeeting() {
         const saved = !!c.comment;
         return `<tr>
           <td style="font-size:10px;color:#888;white-space:nowrap">${t.wbs}</td>
-          <td style="min-width:140px">${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+          <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
           <td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>
           <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
           <td style="white-space:nowrap;font-size:11px">${t.end||'—'}</td>
@@ -2139,7 +2345,7 @@ function renderDept() {
 
     return `<tr>
       <td style="font-size:10px;color:#888">${t.wbs}</td>
-      <td style="min-width:130px">${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+      <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
       <td style="white-space:nowrap;font-size:11px">${t.bstart||'—'}</td>
       <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
       <td>${pctBar(t.pct)}</td>
@@ -2291,12 +2497,92 @@ function updateThemeBtn() {
 // =====================================================================
 function enhanceTable(tableEl, screenId) {
   if (!tableEl) return;
+  tableEl.style.tableLayout = 'fixed';
   applyColReorder(tableEl, screenId);
   applyColResize(tableEl, screenId);
   applyColFilter(tableEl, screenId);
+  // Wire auto-fit button if present near the table
+  const container = tableEl.closest('.section') || tableEl.parentElement;
+  if (container) {
+    container.querySelectorAll('.auto-fit-btn').forEach(btn => {
+      btn.onclick = () => {
+        const key = 'pj_column_widths_' + screenId;
+        const thead = tableEl.querySelector('thead');
+        if (!thead) return;
+        const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
+        if (!headerRow) return;
+        autoFitCols([...headerRow.cells], tableEl, key);
+      };
+    });
+  }
 }
 
-// --- Column Resize (auto-fit on first load) ---
+// --- Column width auto-fit helper ---
+// Measure actual text content width using a hidden absolutely-positioned div.
+// Avoids the "table fills container" problem that makes offsetWidth too large.
+let _measureDiv = null;
+function _getOrCreateMeasureDiv() {
+  if (!_measureDiv || !document.body.contains(_measureDiv)) {
+    _measureDiv = document.createElement('div');
+    _measureDiv.style.cssText = 'position:absolute;top:-9999px;left:-9999px;' +
+      'visibility:hidden;white-space:nowrap;pointer-events:none';
+    document.body.appendChild(_measureDiv);
+  }
+  return _measureDiv;
+}
+
+function measureColContentWidth(th, colIdx, tableEl) {
+  const div = _getOrCreateMeasureDiv();
+  // Use individual font properties — more reliable than getComputedStyle().font shorthand
+  const cs = window.getComputedStyle(th);
+  div.style.fontSize   = cs.fontSize;
+  div.style.fontWeight = cs.fontWeight;
+  div.style.fontFamily = cs.fontFamily;
+  div.style.letterSpacing = cs.letterSpacing;
+
+  // Header: read only direct text nodes (skip resize handle, filter button)
+  let headerText = '';
+  th.childNodes.forEach(n => { if (n.nodeType === 3) headerText += n.textContent; });
+  headerText = headerText.trim();
+  div.textContent = headerText;
+  let maxW = div.offsetWidth + 10; // 10px padding (5px each side)
+
+  // Body cells
+  tableEl.querySelectorAll('tbody tr').forEach(tr => {
+    const td = tr.cells[colIdx];
+    if (!td) return;
+    const clone = td.cloneNode(true);
+    clone.querySelectorAll('.col-resizer,.resize-handle,.filter-btn,.col-filter-btn').forEach(el => el.remove());
+    div.textContent = clone.textContent.trim();
+    maxW = Math.max(maxW, div.offsetWidth + 10);
+  });
+  return maxW;
+}
+
+function autoFitCols(ths, tableEl, storageKey) {
+  const ws = {};
+  let total = 0;
+  ths.forEach((th, i) => {
+    const w = measureColContentWidth(th, i, tableEl);
+    th.style.width = w + 'px'; th.style.minWidth = '0';
+    ws[i] = w + 'px';
+    total += w;
+  });
+  if (total > 0) tableEl.style.width = total + 'px';
+  localStorage.setItem(storageKey, JSON.stringify(ws));
+}
+
+function fitSingleCol(th, peerThs, tableEl, storageKey) {
+  const colIdx = peerThs.indexOf(th);
+  if (colIdx === -1) return;
+  const w = measureColContentWidth(th, colIdx, tableEl);
+  th.style.width = w + 'px'; th.style.minWidth = '0';
+  const ws = {};
+  peerThs.forEach((t, i) => { ws[i] = t.offsetWidth + 'px'; });
+  localStorage.setItem(storageKey, JSON.stringify(ws));
+}
+
+// --- Column Resize ---
 function applyColResize(tableEl, screenId) {
   const key = 'pj_column_widths_' + screenId;
   const saved = JSON.parse(localStorage.getItem(key) || '{}');
@@ -2308,7 +2594,7 @@ function applyColResize(tableEl, screenId) {
   const ths = [...headerRow.cells];
   ths.forEach((th, i) => {
     th.style.position = 'relative';
-    if (hasSaved && saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
+    if (hasSaved && saved[i]) { th.style.width = saved[i]; th.style.minWidth = '0'; }
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
     handle.className = 'col-resizer';
@@ -2318,7 +2604,7 @@ function applyColResize(tableEl, screenId) {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onMove = (ev) => { const w = Math.max(20, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = '0'; };
       const onUp = () => {
         handle.classList.remove('resizing');
         const ws = {}; ths.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
@@ -2328,6 +2614,11 @@ function applyColResize(tableEl, screenId) {
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
+    });
+    // Double-click on resize handle → auto-fit this column
+    handle.addEventListener('dblclick', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      fitSingleCol(th, ths, tableEl, key);
     });
   });
   // Save browser auto-sized widths on first load
@@ -2455,16 +2746,19 @@ function applyColReorder(tableEl, screenId) {
     _applyColOrderByOrig(tableEl, savedOrder);
   }
 
+  let _dragSrcTh = null;
   const ths = [...headerRow.cells];
   ths.forEach((th) => {
     th.setAttribute('draggable', 'true');
     th.addEventListener('dragstart', (e) => {
+      _dragSrcTh = th;
       e.dataTransfer.setData('text/plain', th.getAttribute('data-col-orig'));
       e.dataTransfer.effectAllowed = 'move';
       requestAnimationFrame(() => th.style.opacity = '0.4');
     });
     th.addEventListener('dragend', () => {
       th.style.opacity = '';
+      _dragSrcTh = null;
       ths.forEach(t => t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
@@ -2475,6 +2769,7 @@ function applyColReorder(tableEl, screenId) {
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
+      if (th === _dragSrcTh) return;
       const srcOrig = parseInt(e.dataTransfer.getData('text/plain'));
       const tgtOrig = parseInt(th.getAttribute('data-col-orig'));
       if (isNaN(srcOrig) || isNaN(tgtOrig) || srcOrig === tgtOrig) return;
@@ -2511,100 +2806,145 @@ function _applyColOrderByOrig(tableEl, orderByOrig) {
 
 // --- Gantt-specific enhance (fixed columns only) ---
 function enhanceGanttTable(wrap) {
-  const table = wrap.querySelector('table');
-  if (!table) return;
-  const thead = table.querySelector('thead');
-  if (!thead) return;
-  const firstRow = thead.querySelector('tr:first-child');
-  if (!firstRow) return;
-  const fixedThs = [...firstRow.cells].filter(th => th.rowSpan >= 2);
-  if (fixedThs.length === 0) return;
+  const fixedTbl = document.getElementById('gantt-fixed-tbl');
+  const calTbl   = document.getElementById('gantt-cal-tbl');
+  if (!fixedTbl || !calTbl) return;
+  const headerRow = fixedTbl.querySelector('thead tr');
+  if (!headerRow) return;
+  const fixedThs = [...headerRow.cells];
+  const leftTrs  = [...fixedTbl.querySelectorAll('tbody tr')];
 
-  // Resize
-  const resizeKey = 'pj_column_widths_gantt';
+  function syncCalVisibility() {
+    leftTrs.forEach(tr => {
+      const tid = tr.dataset.taskId;
+      const ctr = calTbl.querySelector(`tr[data-task-id="${tid}"]`);
+      if (ctr) ctr.style.display = tr.style.display;
+    });
+  }
+
+  // ── Resize (table-layout:fixed → width on <th> is authoritative) ──
+  const resizeKey = 'pj_column_widths_gantt_fixed';
   const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
   const hasSavedW = Object.keys(savedW).length > 0;
+
+  function syncFixedTblWidth() {
+    const total = fixedThs.reduce((s, t) => s + (t.offsetWidth || 0), 0);
+    if (total > 0) fixedTbl.style.width = total + 'px';
+  }
+
   fixedThs.forEach((th, i) => {
-    th.style.position = 'relative';
-    if (hasSavedW && savedW[i]) { th.style.width = savedW[i]; th.style.minWidth = savedW[i]; }
+    if (hasSavedW && savedW[i]) th.style.width = savedW[i];
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
-    handle.className = 'col-resizer'; handle.setAttribute('draggable', 'false');
+    handle.className = 'col-resizer'; handle.setAttribute('draggable','false');
     th.appendChild(handle);
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onMove = (ev) => {
+        th.style.width = Math.max(20, startW + ev.clientX - startX) + 'px';
+        syncFixedTblWidth();
+      };
       const onUp = () => {
         handle.classList.remove('resizing');
+        syncFixedTblWidth();
         const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
         localStorage.setItem(resizeKey, JSON.stringify(ws));
-        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
       };
-      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    handle.addEventListener('dblclick', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      fitSingleCol(th, fixedThs, fixedTbl, resizeKey);
     });
   });
-  if (!hasSavedW) {
+  if (hasSavedW) {
+    requestAnimationFrame(() => syncFixedTblWidth());
+  } else {
     requestAnimationFrame(() => {
       const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
       if (Object.keys(ws).length > 0) localStorage.setItem(resizeKey, JSON.stringify(ws));
     });
   }
 
-  // Filter (fixed columns only)
+  // ── Auto-fit button ──
+  const autoFitBtn = (wrap.parentElement || document).querySelector('.gantt-auto-fit-btn');
+  if (autoFitBtn) {
+    autoFitBtn.onclick = () => {
+      autoFitCols(fixedThs, fixedTbl, resizeKey);
+      requestAnimationFrame(() => {
+        syncFixedTblWidth();
+        const gLeft = document.getElementById('gantt-left');
+        if (gLeft) {
+          gLeft.style.width = fixedTbl.offsetWidth + 'px';
+          localStorage.setItem('pj_gantt_left_w', gLeft.style.width);
+        }
+      });
+    };
+  }
+
+  // ── Filter ──
   const filterKey = 'pj_filters_gantt';
-  const savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
-  const trs = [...table.querySelectorAll('tbody tr')];
+  let savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
+  if (Object.keys(savedF).some(k => !isNaN(parseInt(k, 10)))) savedF = {};
+
   function applyGanttFilter() {
-    trs.forEach(tr => {
+    leftTrs.forEach(tr => {
       let visible = true;
-      Object.entries(savedF).forEach(([ci, allowed]) => {
+      Object.entries(savedF).forEach(([colKey, allowed]) => {
         if (!allowed) return;
-        const td = tr.cells[parseInt(ci)];
-        const val = td ? td.textContent.trim() : '';
-        if (!allowed.includes(val)) visible = false;
+        const idx = fixedThs.findIndex(t => (t.dataset.colKey||'') === colKey);
+        if (idx < 0) return;
+        const td = tr.cells[idx];
+        if (!allowed.includes(td ? td.textContent.trim() : '')) visible = false;
       });
       tr.style.display = visible ? '' : 'none';
     });
+    syncCalVisibility();
     localStorage.setItem(filterKey, JSON.stringify(savedF));
   }
   applyGanttFilter();
+
   fixedThs.forEach((th, colIdx) => {
+    const colKey = th.dataset.colKey || String(colIdx);
     th.querySelectorAll('.filter-btn').forEach(b => b.remove());
-    const vals = [...new Set(trs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
-    if (vals.length === 0) return;
+    const vals = [...new Set(leftTrs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
+    if (!vals.length) return;
     const btn = document.createElement('span');
-    btn.className = 'filter-btn' + (savedF[colIdx] ? ' active' : '');
+    btn.className = 'filter-btn' + (savedF[colKey] ? ' active' : '');
     btn.textContent = '▼'; btn.title = 'フィルター'; th.appendChild(btn);
     btn.addEventListener('click', (e) => {
       e.stopPropagation(); e.preventDefault();
       document.querySelectorAll('.col-filter-dropdown').forEach(d => d.remove());
-      const selected = savedF[colIdx] || vals;
+      const selected = savedF[colKey] || vals;
       const dd = document.createElement('div'); dd.className = 'col-filter-dropdown';
       const allWrap = document.createElement('div');
       allWrap.style.cssText = 'padding:4px 0;border-bottom:1px solid #eee;margin-bottom:6px;font-weight:600;display:flex;align-items:center;gap:6px;';
-      const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.checked = !savedF[colIdx];
+      const allCb = document.createElement('input'); allCb.type='checkbox'; allCb.checked=!savedF[colKey];
       allWrap.appendChild(allCb); allWrap.appendChild(document.createTextNode('すべて選択')); dd.appendChild(allWrap);
       const itemCbs = [];
       vals.forEach(val => {
         const lbl = document.createElement('label');
         lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;';
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = val; cb.checked = selected.includes(val);
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=val; cb.checked=selected.includes(val);
         lbl.appendChild(cb); lbl.appendChild(document.createTextNode(val)); dd.appendChild(lbl); itemCbs.push(cb);
         cb.addEventListener('change', () => {
-          const checked = itemCbs.filter(c => c.checked).map(c => c.value);
-          savedF[colIdx] = checked.length === vals.length ? null : checked;
-          allCb.checked = !savedF[colIdx]; btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+          const checked = itemCbs.filter(c=>c.checked).map(c=>c.value);
+          savedF[colKey] = checked.length===vals.length ? null : checked;
+          allCb.checked=!savedF[colKey]; btn.classList.toggle('active',!!savedF[colKey]); applyGanttFilter();
         });
       });
       allCb.addEventListener('change', () => {
-        savedF[colIdx] = allCb.checked ? null : [];
-        itemCbs.forEach(c => c.checked = allCb.checked);
-        btn.classList.toggle('active', !!savedF[colIdx]); applyGanttFilter();
+        savedF[colKey] = allCb.checked ? null : [];
+        itemCbs.forEach(c => c.checked=allCb.checked);
+        btn.classList.toggle('active',!!savedF[colKey]); applyGanttFilter();
       });
       const rect = btn.getBoundingClientRect();
-      dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom + 2) + 'px';
+      dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom+2) + 'px';
       document.body.appendChild(dd);
       setTimeout(() => {
         document.addEventListener('click', function closeDD(ev) {
@@ -2614,34 +2954,35 @@ function enhanceGanttTable(wrap) {
     });
   });
 
-  // Reorder (save as key array, triggers re-render)
+  // ── Column reorder (saves key array, re-renders) ──
   const reorderKey = 'pj_column_order_gantt';
-  fixedThs.forEach((th) => {
-    th.setAttribute('draggable', 'true');
+  let _dragSrc = null;
+  fixedThs.forEach(th => {
+    th.setAttribute('draggable','true');
     th.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', th.getAttribute('data-col-key') || '');
+      _dragSrc = th;
+      e.dataTransfer.setData('text/plain', th.dataset.colKey||'');
       e.dataTransfer.effectAllowed = 'move';
-      requestAnimationFrame(() => th.style.opacity = '0.4');
+      requestAnimationFrame(() => th.style.opacity='0.4');
     });
     th.addEventListener('dragend', () => {
-      th.style.opacity = ''; fixedThs.forEach(t => t.classList.remove('drag-over'));
+      th.style.opacity=''; _dragSrc=null; fixedThs.forEach(t=>t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
-      e.preventDefault(); fixedThs.forEach(t => t.classList.remove('drag-over')); th.classList.add('drag-over');
+      e.preventDefault(); fixedThs.forEach(t=>t.classList.remove('drag-over')); th.classList.add('drag-over');
     });
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
+      if (th===_dragSrc) return;
       const srcKey = e.dataTransfer.getData('text/plain');
-      const tgtKey = th.getAttribute('data-col-key');
-      if (!srcKey || !tgtKey || srcKey === tgtKey) return;
-      const currentKeys = [...firstRow.cells].filter(t => t.rowSpan >= 2).map(t => t.getAttribute('data-col-key'));
-      const srcVI = currentKeys.indexOf(srcKey);
-      const tgtVI = currentKeys.indexOf(tgtKey);
-      if (srcVI === -1 || tgtVI === -1) return;
-      const newKeys = [...currentKeys];
-      newKeys.splice(tgtVI, 0, newKeys.splice(srcVI, 1)[0]);
-      localStorage.setItem(reorderKey, JSON.stringify(newKeys));
+      const tgtKey = th.dataset.colKey||'';
+      if (!srcKey||!tgtKey||srcKey===tgtKey) return;
+      const keys = fixedThs.map(t=>t.dataset.colKey||'');
+      const si=keys.indexOf(srcKey), ti=keys.indexOf(tgtKey);
+      if (si<0||ti<0) return;
+      keys.splice(ti, 0, keys.splice(si,1)[0]);
+      localStorage.setItem(reorderKey, JSON.stringify(keys));
       drawGantt();
     });
   });
