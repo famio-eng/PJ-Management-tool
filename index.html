@@ -962,6 +962,9 @@ document.getElementById('excel-file-input').addEventListener('change', function(
         'クリティカル':'critical','アクティブ':'active','アウトラインフィールド':'isSummaryRaw'
       };
       const DATE_FIELDS = ['start','end','bstart','bend','astart','aend'];
+      // raw:true で数値になりうるが、アプリ側で文字列として扱うフィールド
+      const STR_FIELDS  = ['wbs','name','note','duration','remain','pred','resource',
+                           'critical','active','isSummaryRaw'];
 
       state.tasks = rows.map((rawRow, i) => {
         const row = normalizeRow(rawRow);
@@ -969,19 +972,28 @@ document.getElementById('excel-file-input').addEventListener('change', function(
         Object.entries(colMap).forEach(([jp, en]) => {
           t[en] = row[jp] !== undefined ? row[jp] : (en === 'isSummaryRaw' ? '' : null);
         });
+
+        // 数値・その他型 → 文字列に正規化（.startsWith/.split 等を安全に呼ぶため）
+        STR_FIELDS.forEach(f => {
+          if (t[f] == null || t[f] === '') { t[f] = f === 'isSummaryRaw' ? '' : null; return; }
+          if (t[f] instanceof Date) { t[f] = null; return; } // 誤判定されたDate → null
+          t[f] = String(t[f]).trim() || null;
+        });
+        // pred が null の場合は空文字にしておく（後続で !t.pred チェックが効く）
+        if (t.pred == null) t.pred = '';
+
         t.id = parseInt(t.id) || (i + 1);
         t.level = parseInt(t.level) || 1;
 
-        // 達成率: ExcelのDate serial誤読を防ぎつつ 0〜1小数→0〜100整数に変換
+        // 達成率: raw:true で 0〜1 小数 or 整数で来る → 0〜100 整数に変換
         const pctRaw = t.pct;
-        if (pctRaw instanceof Date) {
-          // SheetJS がシリアル値を誤ってDateと解釈した場合は0扱い
+        if (pctRaw instanceof Date || pctRaw == null) {
           t.pct = 0;
         } else {
-          const rawPct = parseFloat(String(pctRaw == null ? '0' : pctRaw).replace('%', '').trim());
+          const rawPct = parseFloat(String(pctRaw).replace('%', '').trim());
           if (isNaN(rawPct)) {
             t.pct = 0;
-          } else if (rawPct <= 1.0 && rawPct >= 0 && !String(pctRaw || '').includes('%')) {
+          } else if (rawPct <= 1.0 && rawPct >= 0 && !String(pctRaw).includes('%')) {
             // 0〜1 の小数（%記号なし） → ×100
             t.pct = Math.round(rawPct * 100);
           } else {
@@ -989,12 +1001,12 @@ document.getElementById('excel-file-input').addEventListener('change', function(
           }
         }
 
-        // 日付列: Date / 文字列 → Date または null に変換
+        // 日付列: Date / 文字列 / 数値シリアル → Date または null に変換
         DATE_FIELDS.forEach(f => { t[f] = parseExcelDate(t[f]); });
 
         t.isSummary = t.isSummaryRaw === 'はい' || t.level === 1;
         return t;
-      });
+      }).filter(t => t.name); // タスク名がない空行を除去
     } catch(err) {
       console.error('Excel data transform error:', err);
       alert('データの変換中にエラーが発生しました:\n' + err.message + '\n\n' + (err.stack || ''));
@@ -1008,7 +1020,13 @@ document.getElementById('excel-file-input').addEventListener('change', function(
       console.log('[Excel import] 完了。タスク数:', state.tasks.length);
     } catch(err) {
       console.error('Render error after Excel import:', err);
-      alert('読み込みは成功しましたが、画面の描画中にエラーが発生しました:\n' + err.message + '\n\n' + (err.stack || ''));
+      // alert より選択・コピーしやすいページ内エラー表示
+      const msg = err.message + '\n' + (err.stack || '');
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#fff3f3;border:2px solid #e53935;border-radius:8px;padding:16px;max-width:600px;max-height:80vh;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,0.3)';
+      box.innerHTML = '<b style="color:#e53935">⚠ 描画エラー（選択してコピーしてください）</b>\n\n' + msg.replace(/</g,'&lt;');
+      box.innerHTML += '\n\n<button onclick="this.parentNode.remove()" style="margin-top:8px;padding:4px 12px;cursor:pointer">閉じる</button>';
+      document.body.appendChild(box);
     }
   };
   reader.readAsArrayBuffer(file);
@@ -1281,7 +1299,7 @@ function buildTLTaskListHTML() {
     const bold = t.level <= 2;
     const rowCls = t.level === 1 ? 'tl-list-l1' : t.level === 2 ? 'tl-list-l2' : '';
     const isCritical = t.critical === 'はい';
-    const name = t.name.length > 32 ? t.name.slice(0, 31) + '…' : t.name;
+    const name = (t.name || '').length > 32 ? (t.name || '').slice(0, 31) + '…' : (t.name || '');
     html += `<tr class="${rowCls}" style="border-bottom:1px solid #f0f0f0">
       <td style="text-align:center;padding:3px 6px">
         <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
@@ -2280,7 +2298,7 @@ function drawGantt() {
   const visibleTasks = [];
   const hiddenParents = new Set();
   state.tasks.forEach(t => {
-    const isHidden = [...hiddenParents].some(hw => t.wbs.startsWith(hw + '.'));
+    const isHidden = t.wbs ? [...hiddenParents].some(hw => t.wbs.startsWith(hw + '.')) : false;
     if (!isHidden) {
       visibleTasks.push(t);
       if (t.isSummary && state.collapsedRows.has(t.id)) hiddenParents.add(t.wbs);
