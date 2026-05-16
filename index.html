@@ -84,14 +84,25 @@ tr:hover td{background:#fafbff}
 body.dark .tl-label-bg{fill:#16213e}
 .tl-label-sep{stroke:#ddd;stroke-width:1}
 body.dark .tl-label-sep{stroke:#2a3a5c}
-/* Gantt */
-#gantt-wrap{overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.gantt-table{border-collapse:collapse;font-size:11px;min-width:100%}
-.gantt-table th,.gantt-table td{border:1px solid #e8e8e8;padding:0}
-.gantt-table .gt-cell{padding:4px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gantt-table .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:4px 2px}
-.gantt-table .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px}
-.gantt-bar-cell{min-width:20px;padding:0;position:relative;height:26px}
+/* Gantt split layout */
+#gantt-wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
+.gantt-split-outer{display:flex;overflow:hidden}
+.gantt-left{max-height:calc(100vh - 140px)}
+.gantt-right{max-height:calc(100vh - 140px)}
+.gantt-left{flex-shrink:0;overflow:hidden;overflow-y:scroll;scrollbar-width:none;border-right:2px solid #c8d0e0}
+.gantt-left::-webkit-scrollbar{display:none}
+.gantt-right{flex:1;overflow:auto;min-width:0}
+/* Fixed columns table */
+.gantt-fixed-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed;border-right:none}
+.gantt-fixed-tbl th,.gantt-fixed-tbl td{border:1px solid #e8e8e8;padding:0;overflow:hidden}
+.gantt-fixed-tbl thead th{background:#f5f7fa;font-weight:600;font-size:10px;padding:4px 5px;height:52px;white-space:nowrap;position:relative;vertical-align:middle;text-align:left}
+.gantt-fixed-tbl tbody td{height:26px;padding:3px 5px;white-space:nowrap;vertical-align:middle;box-sizing:border-box}
+/* Calendar table */
+.gantt-cal-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed}
+.gantt-cal-tbl th,.gantt-cal-tbl td{border:1px solid #e8e8e8;padding:0}
+.gantt-cal-tbl .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:2px;height:26px;width:22px;box-sizing:border-box}
+.gantt-cal-tbl .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px;height:26px}
+.gantt-bar-cell{width:22px;padding:0;position:relative;height:26px;box-sizing:border-box}
 .gantt-bar-base{position:absolute;height:14px;top:6px;border-radius:2px;background:#4472C4;opacity:.6}
 .gantt-bar-actual{position:absolute;height:14px;top:6px;border-radius:2px;background:#00B050;opacity:.85}
 .today-col{background:#FFF3E0 !important}
@@ -186,9 +197,10 @@ body.dark #nw-panel{background:#16213e;border-color:#3a3a5c}
 body.dark #nw-svg-container{background:#1a1a2e}
 body.dark .nw-detail-label{color:#7a8a9a}
 body.dark .nw-detail-cell .nw-detail-label{color:#7a8a9a}
-body.dark .gantt-table th{background:#1e2a45;border-color:#3a3a5c}
-body.dark .gantt-table td{border-color:#2a2a4a}
+body.dark .gantt-fixed-tbl th,.dark .gantt-cal-tbl th{background:#1e2a45;border-color:#3a3a5c}
+body.dark .gantt-fixed-tbl td,.dark .gantt-cal-tbl td{border-color:#2a2a4a}
 body.dark .gantt-controls{border-color:#3a3a5c}
+body.dark .gantt-left{border-color:#3a3a5c}
 body.dark .gt-month{background:#243555;color:#90b8e0}
 body.dark .gt-header{background:#1e2a45;color:#b0bec5}
 body.dark textarea.comment-input{background:#1a1a2e;border-color:#3a3a5c;color:#e0e0e0}
@@ -216,12 +228,11 @@ body.dark .filter-btn.active{color:#90b8e0}
 th.drag-over{background:#d0e4f7!important;outline:2px dashed #4472C4;outline-offset:-2px}
 body.dark th.drag-over{background:#243555!important;outline-color:#90b8e0}
 /* Gantt dark mode - class-based overrides */
-.gantt-summary-row td { background: #f5f7fa; }
-body.dark .gantt-summary-row td { background: #1a2535 !important; }
-body.dark .gantt-table .today-bg { background: #2c2010 !important; }
-body.dark .gantt-table td.gt-cell { color: #d0d8e8; }
-/* Gantt: default cell and wrap background in dark mode */
-body.dark #gantt-wrap { background: #16213e; }
+.gantt-fixed-tbl .gantt-summary-row td{background:#f5f7fa}
+body.dark .gantt-fixed-tbl .gantt-summary-row td{background:#1a2535!important}
+body.dark .gantt-cal-tbl .today-bg{background:#2c2010!important}
+body.dark .gantt-fixed-tbl tbody td{color:#d0d8e8}
+body.dark #gantt-wrap,.dark .gantt-left,.dark .gantt-right{background:#16213e}
 body.dark .gantt-table td { background: #16213e; }
 /* Section headings in dark mode */
 body.dark .section h2 { color: #90b8e0; border-left-color: #4472C4; }
@@ -1666,6 +1677,7 @@ window.closeNWSubModal = window.closeNWSubPanel;
 
 function buildSubgraphWindowHTML() {
   return '<!DOCTYPE html>\n<html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>\n' +
+'<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><' + '/script>\n' +
 '<style>\n' +
 '*{box-sizing:border-box;margin:0;padding:0}\n' +
 'body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}\n' +
@@ -1693,7 +1705,7 @@ function buildSubgraphWindowHTML() {
 '<div id="tip"></div>\n' +
 '<script>\n' +
 '(function(){\n' +
-'var op=window.opener,d3=op&&op.d3,_data=op&&op._nwSubData||{};\n' +
+'var op=window.opener,_data=op&&op._nwSubData||{};\n' +
 'var ALL=_data.tasks||[],fid=_data.focusId||0,dep=_data.depth||2,_z,_sv;\n' +
 'document.title="サブグラフ: "+(_data.title||fid);\n' +
 'document.getElementById("ft").textContent=_data.title||fid;\n' +
@@ -1843,135 +1855,118 @@ function drawGantt() {
   const weeks = state.ganttWeeks;
   const startWeek = new Date(monday.getTime() - Math.floor(weeks * 0.3) * 7 * 86400000);
 
-  // Generate week headers
   const weekDates = [];
-  for (let i = 0; i < weeks; i++) {
-    const w = new Date(startWeek.getTime() + i * 7 * 86400000);
-    weekDates.push(w);
-  }
+  for (let i = 0; i < weeks; i++) weekDates.push(new Date(startWeek.getTime() + i * 7 * 86400000));
 
-  // Group weeks by month for header
   const monthGroups = [];
   let curMonth = null, curStart = 0;
   weekDates.forEach((w, i) => {
-    const m = `${w.getFullYear()}/${String(w.getMonth() + 1).padStart(2,'0')}`;
+    const m = `${w.getFullYear()}/${String(w.getMonth()+1).padStart(2,'0')}`;
     if (m !== curMonth) {
-      if (curMonth !== null) monthGroups.push({label: curMonth, count: i - curStart});
-      curMonth = m;
-      curStart = i;
+      if (curMonth !== null) monthGroups.push({label:curMonth, count:i-curStart});
+      curMonth = m; curStart = i;
     }
   });
-  if (curMonth) monthGroups.push({label: curMonth, count: weekDates.length - curStart});
+  if (curMonth) monthGroups.push({label:curMonth, count:weekDates.length-curStart});
 
-  // Fixed columns
   let fixedCols = [
-    {key:'id',label:'ID',w:40},{key:'wbs',label:'WBS番号',w:70},{key:'name',label:'タスク名',w:200},{key:'resource',label:'担当部門',w:80},
-    {key:'pct',label:'達成率',w:65},{key:'status',label:'ステータス',w:70},{key:'nw',label:'NW図',w:32}
+    {key:'id',label:'ID',w:40},{key:'wbs',label:'WBS番号',w:70},{key:'name',label:'タスク名',w:200},
+    {key:'resource',label:'担当部門',w:80},{key:'pct',label:'達成率',w:65},
+    {key:'status',label:'ステータス',w:70},{key:'nw',label:'NW図',w:32}
   ];
 
-  // Visible tasks (apply collapse)
   const visibleTasks = [];
   const hiddenParents = new Set();
   state.tasks.forEach(t => {
-    // Check if any parent is collapsed
-    const parentWbs = t.wbs.split('.').slice(0, -1).join('.');
     const isHidden = [...hiddenParents].some(hw => t.wbs.startsWith(hw + '.'));
     if (!isHidden) {
       visibleTasks.push(t);
-      if (t.isSummary && state.collapsedRows.has(t.id)) {
-        hiddenParents.add(t.wbs);
-      }
+      if (t.isSummary && state.collapsedRows.has(t.id)) hiddenParents.add(t.wbs);
     }
   });
 
-  // Apply saved column order
-  const _ganttColOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
-  if (_ganttColOrder && _ganttColOrder.length === fixedCols.length) {
-    fixedCols = _ganttColOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
-    if (fixedCols.length !== _ganttColOrder.length) fixedCols = [{key:'id',label:'ID'},{key:'wbs',label:'WBS番号'},{key:'name',label:'タスク名'},{key:'resource',label:'担当部門'},{key:'pct',label:'達成率'},{key:'status',label:'ステータス'},{key:'nw',label:'NW図'}];
+  const savedOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
+  if (savedOrder && savedOrder.length === fixedCols.length) {
+    const ordered = savedOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
+    if (ordered.length === fixedCols.length) fixedCols = ordered;
   }
 
-  let html = '<table class="gantt-table"><thead>';
-  // Month row
-  html += '<tr>';
-  fixedCols.forEach(c => html += `<th class="gt-cell" data-col-key="${c.key}" style="white-space:nowrap" rowspan="2">${c.label}</th>`);
-  monthGroups.forEach(mg => html += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
-  html += '</tr>';
-  // Week row
-  html += '<tr>';
-  weekDates.forEach(w => {
-    const isToday = w <= rd && new Date(w.getTime() + 6 * 86400000) >= rd;
-    html += `<th class="gt-header${isToday?' today-col':''}" style="min-width:22px;width:22px">${w.getDate()}</th>`;
+  // ── LEFT TABLE: fixed columns (table-layout:fixed → truly resizable) ──
+  let L = '<table class="gantt-fixed-tbl" id="gantt-fixed-tbl"><thead><tr>';
+  fixedCols.forEach((c, i) => {
+    L += `<th data-col-key="${c.key}" data-col-orig="${i}" style="width:${c.w}px">${c.label}</th>`;
   });
-  html += '</tr></thead><tbody>';
-
+  L += '</tr></thead><tbody>';
   visibleTasks.forEach(task => {
     const isCP = task.critical === 'はい' && !task.isSummary;
     const isSummary = task.isSummary;
     const isCollapsed = state.collapsedRows.has(task.id);
-    const indent = task.level === 1 ? 'il1' : task.level === 2 ? 'il2' : task.level === 3 ? 'il3' : 'il4';
-    const rowBg = '';
-
-    html += `<tr class="${isCP ? 'cp-row' : ''}${isSummary ? ' gantt-summary-row' : ''}">`;
+    const indent = {1:'il1',2:'il2',3:'il3'}[task.level] || 'il4';
+    L += `<tr class="${isCP?'cp-row':''}${isSummary?' gantt-summary-row':''}" data-task-id="${task.id}">`;
     fixedCols.forEach(c => {
       let val = '';
       if (c.key === 'id') val = `<span style="font-size:10px;color:#aaa">${task.id}</span>`;
       else if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
       else if (c.key === 'name') {
-        const toggle = isSummary ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>` : '<span style="display:inline-block;width:18px"></span>';
-        val = `<div class="${indent}" style="white-space:nowrap">${toggle}${task.name}</div>`;
+        const tog = isSummary
+          ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>`
+          : '<span style="display:inline-block;width:18px"></span>';
+        val = `<div class="${indent}">${tog}${task.name}</div>`;
       }
       else if (c.key === 'resource') val = `<span style="font-size:10px;color:#888">${task.resource||''}</span>`;
-      else if (c.key === 'pct') val = `${pctBar(task.pct)}`;
+      else if (c.key === 'pct') val = pctBar(task.pct);
       else if (c.key === 'status') val = statusBadge(task.status);
-      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="showNWSubPanel(${task.id})" title="サブグラフを表示">🔗</span>`;
-      const stickyStyle = ['id','wbs','name','resource','pct','status','nw'].includes(c.key) ?
-        'position:sticky;left:0;z-index:1;' : '';
-      html += `<td class="gt-cell" style="${stickyStyle}white-space:nowrap">${val}</td>`;
+      else if (c.key === 'nw') val = `<span class="nw-icon" onclick="showNWSubPanel(${task.id})" title="サブグラフ">🔗</span>`;
+      L += `<td class="gft-cell">${val}</td>`;
     });
+    L += '</tr>';
+  });
+  L += '</tbody></table>';
 
+  // ── RIGHT TABLE: calendar columns ──
+  let R = '<table class="gantt-cal-tbl" id="gantt-cal-tbl"><thead><tr>';
+  monthGroups.forEach(mg => R += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
+  R += '</tr><tr>';
+  weekDates.forEach(w => {
+    const isToday = w <= rd && new Date(w.getTime() + 6*86400000) >= rd;
+    R += `<th class="gt-header${isToday?' today-col':''}">${w.getDate()}</th>`;
+  });
+  R += '</tr></thead><tbody>';
+  const today = toDate(state.reportDate);
+  visibleTasks.forEach(task => {
+    const isCP = task.critical === 'はい' && !task.isSummary;
+    const isSummary = task.isSummary;
     const bstart = toDate(task.bstart), bend = toDate(task.bend);
     const astart = toDate(task.astart), aend = toDate(task.aend);
-    const today = toDate(state.reportDate);
-
+    R += `<tr class="${isCP?'cp-row':''}${isSummary?' gantt-summary-row':''}" data-task-id="${task.id}">`;
     weekDates.forEach(w => {
-      const wEnd = new Date(w.getTime() + 6 * 86400000);
-      const isToday = w <= today && wEnd >= today;
-      const bg = '';
-      const todayClass = isToday ? ' today-bg' : '';
-
-      // Check overlaps
-      const baseOverlap = bstart && bend && bstart <= wEnd && bend >= w;
-      const actualOverlap = astart && (aend || today) && astart <= wEnd && (aend || today) >= w;
-
-      let cellContent = '<div style="position:relative;height:22px">';
-      if (baseOverlap) {
-        // Calculate left% and width% within the week
-        const clampedStart = Math.max(bstart, w);
-        const clampedEnd = Math.min(bend, wEnd);
-        const weekMs = 7 * 86400000;
-        const leftPct = (clampedStart - w) / weekMs * 100;
-        const widPct = (clampedEnd - clampedStart) / weekMs * 100;
-        const color = isSummary ? '#2F5597' : '#4472C4';
-        cellContent += `<div class="gantt-bar-base" style="left:${leftPct}%;width:${widPct}%;background:${color}"></div>`;
+      const wEnd = new Date(w.getTime() + 6*86400000);
+      const isTW = w <= today && wEnd >= today;
+      const baseOvlp = bstart && bend && bstart <= wEnd && bend >= w;
+      const actOvlp  = astart && (aend||today) && astart <= wEnd && (aend||today) >= w;
+      let cc = '<div style="position:relative;height:22px">';
+      if (baseOvlp) {
+        const cs=Math.max(bstart,w), ce=Math.min(bend,wEnd), ms=7*86400000;
+        cc += `<div class="gantt-bar-base" style="left:${(cs-w)/ms*100}%;width:${(ce-cs)/ms*100}%;background:${isSummary?'#2F5597':'#4472C4'}"></div>`;
       }
-      if (actualOverlap) {
-        const effectiveEnd = aend || today;
-        const clampedStart = Math.max(astart, w);
-        const clampedEnd = Math.min(effectiveEnd, wEnd);
-        const weekMs = 7 * 86400000;
-        const leftPct = (clampedStart - w) / weekMs * 100;
-        const widPct = (clampedEnd - clampedStart) / weekMs * 100;
-        cellContent += `<div class="gantt-bar-actual" style="left:${leftPct}%;width:${widPct}%"></div>`;
+      if (actOvlp) {
+        const eff=aend||today, cs=Math.max(astart,w), ce=Math.min(eff,wEnd), ms=7*86400000;
+        cc += `<div class="gantt-bar-actual" style="left:${(cs-w)/ms*100}%;width:${(ce-cs)/ms*100}%"></div>`;
       }
-      cellContent += '</div>';
-      html += `<td class="gantt-bar-cell${todayClass}">${cellContent}</td>`;
+      cc += '</div>';
+      R += `<td class="gantt-bar-cell${isTW?' today-bg':''}">${cc}</td>`;
     });
-    html += '</tr>';
+    R += '</tr>';
   });
+  R += '</tbody></table>';
 
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
+  wrap.innerHTML = `<div class="gantt-split-outer"><div class="gantt-left" id="gantt-left">${L}</div><div class="gantt-right" id="gantt-right">${R}</div></div>`;
+
+  // Vertical scroll sync: right panel drives left panel
+  const gRight = document.getElementById('gantt-right');
+  const gLeft  = document.getElementById('gantt-left');
+  if (gRight && gLeft) gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+
   enhanceGanttTable(wrap);
 }
 
@@ -2613,65 +2608,54 @@ function _applyColOrderByOrig(tableEl, orderByOrig) {
 
 // --- Gantt-specific enhance (fixed columns only) ---
 function enhanceGanttTable(wrap) {
-  const table = wrap.querySelector('table');
-  if (!table) return;
-  const thead = table.querySelector('thead');
-  if (!thead) return;
-  const firstRow = thead.querySelector('tr:first-child');
-  if (!firstRow) return;
-  const fixedThs = [...firstRow.cells].filter(th => th.rowSpan >= 2);
-  if (fixedThs.length === 0) return;
+  const fixedTbl = document.getElementById('gantt-fixed-tbl');
+  const calTbl   = document.getElementById('gantt-cal-tbl');
+  if (!fixedTbl || !calTbl) return;
+  const headerRow = fixedTbl.querySelector('thead tr');
+  if (!headerRow) return;
+  const fixedThs = [...headerRow.cells];
+  const leftTrs  = [...fixedTbl.querySelectorAll('tbody tr')];
 
-  // Resize
-  const resizeKey = 'pj_column_widths_gantt';
-  const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
-  const hasSavedW = Object.keys(savedW).length > 0;
-  const fixedColCount = fixedThs.length;
-  function applyGanttColWidths() {
-    fixedThs.forEach((th, i) => {
-      const w = th.offsetWidth;
-      table.querySelectorAll(`tbody tr`).forEach(tr => {
-        const td = tr.cells[i];
-        if (td) { td.style.maxWidth = w + 'px'; td.style.overflow = 'hidden'; }
-      });
+  function syncCalVisibility() {
+    leftTrs.forEach(tr => {
+      const tid = tr.dataset.taskId;
+      const ctr = calTbl.querySelector(`tr[data-task-id="${tid}"]`);
+      if (ctr) ctr.style.display = tr.style.display;
     });
   }
 
+  // ── Resize (table-layout:fixed → width on <th> is authoritative) ──
+  const resizeKey = 'pj_column_widths_gantt';
+  const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
+  const hasSavedW = Object.keys(savedW).length > 0;
+
   fixedThs.forEach((th, i) => {
     th.style.position = 'relative';
-    if (hasSavedW && savedW[i]) { th.style.width = savedW[i]; th.style.minWidth = '0'; }
+    if (hasSavedW && savedW[i]) th.style.width = savedW[i];
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
-    handle.className = 'col-resizer'; handle.setAttribute('draggable', 'false');
+    handle.className = 'col-resizer'; handle.setAttribute('draggable','false');
     th.appendChild(handle);
     handle.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (ev) => {
-        const w = Math.max(20, startW + ev.clientX - startX);
-        th.style.width = w + 'px'; th.style.minWidth = '0';
-        table.querySelectorAll('tbody tr').forEach(tr => {
-          const td = tr.cells[i];
-          if (td) { td.style.maxWidth = w + 'px'; td.style.overflow = 'hidden'; }
-        });
-      };
+      const onMove = (ev) => { th.style.width = Math.max(20, startW + ev.clientX - startX) + 'px'; };
       const onUp = () => {
         handle.classList.remove('resizing');
         const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
         localStorage.setItem(resizeKey, JSON.stringify(ws));
-        document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
       };
-      document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
-    // Double-click on resize handle → auto-fit this column
     handle.addEventListener('dblclick', (e) => {
       e.preventDefault(); e.stopPropagation();
-      fitSingleCol(th, fixedThs, table, resizeKey);
-      applyGanttColWidths();
+      fitSingleCol(th, fixedThs, fixedTbl, resizeKey);
     });
   });
-  if (hasSavedW) requestAnimationFrame(applyGanttColWidths);
   if (!hasSavedW) {
     requestAnimationFrame(() => {
       const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
@@ -2679,39 +2663,39 @@ function enhanceGanttTable(wrap) {
     });
   }
 
-  // Auto-fit button — button lives in the sibling controls div, not inside wrap
+  // ── Auto-fit button ──
   const autoFitBtn = (wrap.parentElement || document).querySelector('.gantt-auto-fit-btn');
   if (autoFitBtn) {
-    autoFitBtn.onclick = () => { autoFitCols(fixedThs, table, resizeKey); };
+    autoFitBtn.onclick = () => { autoFitCols(fixedThs, fixedTbl, resizeKey); };
   }
 
-  // Filter (fixed columns only)
+  // ── Filter ──
   const filterKey = 'pj_filters_gantt';
   let savedF = JSON.parse(localStorage.getItem(filterKey) || '{}');
-  // Reset old numeric-indexed filter state (column count changed)
   if (Object.keys(savedF).some(k => !isNaN(parseInt(k, 10)))) savedF = {};
-  const trs = [...table.querySelectorAll('tbody tr')];
+
   function applyGanttFilter() {
-    trs.forEach(tr => {
+    leftTrs.forEach(tr => {
       let visible = true;
       Object.entries(savedF).forEach(([colKey, allowed]) => {
         if (!allowed) return;
-        const thIdx = fixedThs.findIndex(t => (t.dataset.colKey || '') === colKey);
-        if (thIdx < 0) return;
-        const td = tr.cells[thIdx];
-        const val = td ? td.textContent.trim() : '';
-        if (!allowed.includes(val)) visible = false;
+        const idx = fixedThs.findIndex(t => (t.dataset.colKey||'') === colKey);
+        if (idx < 0) return;
+        const td = tr.cells[idx];
+        if (!allowed.includes(td ? td.textContent.trim() : '')) visible = false;
       });
       tr.style.display = visible ? '' : 'none';
     });
+    syncCalVisibility();
     localStorage.setItem(filterKey, JSON.stringify(savedF));
   }
   applyGanttFilter();
+
   fixedThs.forEach((th, colIdx) => {
     const colKey = th.dataset.colKey || String(colIdx);
     th.querySelectorAll('.filter-btn').forEach(b => b.remove());
-    const vals = [...new Set(trs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
-    if (vals.length === 0) return;
+    const vals = [...new Set(leftTrs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
+    if (!vals.length) return;
     const btn = document.createElement('span');
     btn.className = 'filter-btn' + (savedF[colKey] ? ' active' : '');
     btn.textContent = '▼'; btn.title = 'フィルター'; th.appendChild(btn);
@@ -2722,27 +2706,27 @@ function enhanceGanttTable(wrap) {
       const dd = document.createElement('div'); dd.className = 'col-filter-dropdown';
       const allWrap = document.createElement('div');
       allWrap.style.cssText = 'padding:4px 0;border-bottom:1px solid #eee;margin-bottom:6px;font-weight:600;display:flex;align-items:center;gap:6px;';
-      const allCb = document.createElement('input'); allCb.type = 'checkbox'; allCb.checked = !savedF[colKey];
+      const allCb = document.createElement('input'); allCb.type='checkbox'; allCb.checked=!savedF[colKey];
       allWrap.appendChild(allCb); allWrap.appendChild(document.createTextNode('すべて選択')); dd.appendChild(allWrap);
       const itemCbs = [];
       vals.forEach(val => {
         const lbl = document.createElement('label');
         lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;';
-        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = val; cb.checked = selected.includes(val);
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=val; cb.checked=selected.includes(val);
         lbl.appendChild(cb); lbl.appendChild(document.createTextNode(val)); dd.appendChild(lbl); itemCbs.push(cb);
         cb.addEventListener('change', () => {
-          const checked = itemCbs.filter(c => c.checked).map(c => c.value);
-          savedF[colKey] = checked.length === vals.length ? null : checked;
-          allCb.checked = !savedF[colKey]; btn.classList.toggle('active', !!savedF[colKey]); applyGanttFilter();
+          const checked = itemCbs.filter(c=>c.checked).map(c=>c.value);
+          savedF[colKey] = checked.length===vals.length ? null : checked;
+          allCb.checked=!savedF[colKey]; btn.classList.toggle('active',!!savedF[colKey]); applyGanttFilter();
         });
       });
       allCb.addEventListener('change', () => {
         savedF[colKey] = allCb.checked ? null : [];
-        itemCbs.forEach(c => c.checked = allCb.checked);
-        btn.classList.toggle('active', !!savedF[colKey]); applyGanttFilter();
+        itemCbs.forEach(c => c.checked=allCb.checked);
+        btn.classList.toggle('active',!!savedF[colKey]); applyGanttFilter();
       });
       const rect = btn.getBoundingClientRect();
-      dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom + 2) + 'px';
+      dd.style.left = rect.left + 'px'; dd.style.top = (rect.bottom+2) + 'px';
       document.body.appendChild(dd);
       setTimeout(() => {
         document.addEventListener('click', function closeDD(ev) {
@@ -2752,37 +2736,35 @@ function enhanceGanttTable(wrap) {
     });
   });
 
-  // Reorder (save as key array, triggers re-render)
+  // ── Column reorder (saves key array, re-renders) ──
   const reorderKey = 'pj_column_order_gantt';
-  let _ganttDragSrcTh = null;
-  fixedThs.forEach((th) => {
-    th.setAttribute('draggable', 'true');
+  let _dragSrc = null;
+  fixedThs.forEach(th => {
+    th.setAttribute('draggable','true');
     th.addEventListener('dragstart', (e) => {
-      _ganttDragSrcTh = th;
-      e.dataTransfer.setData('text/plain', th.getAttribute('data-col-key') || '');
+      _dragSrc = th;
+      e.dataTransfer.setData('text/plain', th.dataset.colKey||'');
       e.dataTransfer.effectAllowed = 'move';
-      requestAnimationFrame(() => th.style.opacity = '0.4');
+      requestAnimationFrame(() => th.style.opacity='0.4');
     });
     th.addEventListener('dragend', () => {
-      th.style.opacity = ''; _ganttDragSrcTh = null; fixedThs.forEach(t => t.classList.remove('drag-over'));
+      th.style.opacity=''; _dragSrc=null; fixedThs.forEach(t=>t.classList.remove('drag-over'));
     });
     th.addEventListener('dragover', (e) => {
-      e.preventDefault(); fixedThs.forEach(t => t.classList.remove('drag-over')); th.classList.add('drag-over');
+      e.preventDefault(); fixedThs.forEach(t=>t.classList.remove('drag-over')); th.classList.add('drag-over');
     });
     th.addEventListener('dragleave', () => th.classList.remove('drag-over'));
     th.addEventListener('drop', (e) => {
       e.preventDefault(); th.classList.remove('drag-over');
-      if (th === _ganttDragSrcTh) return;
+      if (th===_dragSrc) return;
       const srcKey = e.dataTransfer.getData('text/plain');
-      const tgtKey = th.getAttribute('data-col-key');
-      if (!srcKey || !tgtKey || srcKey === tgtKey) return;
-      const currentKeys = [...firstRow.cells].filter(t => t.rowSpan >= 2).map(t => t.getAttribute('data-col-key'));
-      const srcVI = currentKeys.indexOf(srcKey);
-      const tgtVI = currentKeys.indexOf(tgtKey);
-      if (srcVI === -1 || tgtVI === -1) return;
-      const newKeys = [...currentKeys];
-      newKeys.splice(tgtVI, 0, newKeys.splice(srcVI, 1)[0]);
-      localStorage.setItem(reorderKey, JSON.stringify(newKeys));
+      const tgtKey = th.dataset.colKey||'';
+      if (!srcKey||!tgtKey||srcKey===tgtKey) return;
+      const keys = fixedThs.map(t=>t.dataset.colKey||'');
+      const si=keys.indexOf(srcKey), ti=keys.indexOf(tgtKey);
+      if (si<0||ti<0) return;
+      keys.splice(ti, 0, keys.splice(si,1)[0]);
+      localStorage.setItem(reorderKey, JSON.stringify(keys));
       drawGantt();
     });
   });
