@@ -747,17 +747,27 @@ function loadStorage() {
 // Excelエクスポートの日付文字列を Date に変換
 // 対応形式: "2024年04月15日 8:00" / "2024/04/15" / Date オブジェクト / "N/A" → null
 function parseExcelDate(val) {
-  if (!val || val === 'N/A') return null;
+  if (val == null || val === '' || val === 'N/A') return null;
+  // SheetJS cellDates:true で既に Date オブジェクトになっている場合
   if (val instanceof Date) return isNaN(val) ? null : val;
+  // 数値の場合は Excel シリアル日付として変換
+  if (typeof val === 'number') {
+    // Excel シリアル（1900年1月1日起点、うるう年バグ補正）
+    const d = new Date(Math.round((val - 25569) * 86400000));
+    return isNaN(d) ? null : d;
+  }
   const s = String(val).trim();
-  // "2024年04月15日" 形式
-  const m = s.match(/(\d{4})年(\d{2})月(\d{2})日/);
-  if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
-  // "2024/04/15" 形式
-  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) return new Date(s.replace(/\//g, '-'));
-  // その他（ISO文字列など）
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
+  if (!s || s === 'N/A') return null;
+  // "2024年04月15日 8:00" 形式
+  const mJP = s.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (mJP) return new Date(parseInt(mJP[1]), parseInt(mJP[2]) - 1, parseInt(mJP[3]));
+  // "2024/04/15" または "2024/4/15" 形式（年月日を分解してローカル時刻で生成）
+  const mSlash = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (mSlash) return new Date(parseInt(mSlash[1]), parseInt(mSlash[2]) - 1, parseInt(mSlash[3]));
+  // "2024-04-15" 形式（同上）
+  const mDash = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (mDash) return new Date(parseInt(mDash[1]), parseInt(mDash[2]) - 1, parseInt(mDash[3]));
+  return null;
 }
 
 function toDate(s) {
@@ -891,10 +901,59 @@ document.getElementById('excel-file-input').addEventListener('change', function(
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(ev) {
+    // --- フェーズ1: XLSX パース ---
+    let wb, ws, rows;
     try {
-      const wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, {raw:false});
+      wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
+    } catch(err) {
+      alert('XLSXファイルの解析に失敗しました（ファイル形式を確認してください）:\n' + err.message);
+      return;
+    }
+
+    // --- フェーズ2: シート取得・JSON変換 ---
+    try {
+      ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error('シートが見つかりません。シート名: ' + wb.SheetNames.join(', '));
+      // raw:true + cellDates:true でネイティブ型（Date・数値・文字列）を取得
+      rows = XLSX.utils.sheet_to_json(ws, {raw:true, defval:null});
+      if (rows.length === 0) throw new Error('シートにデータが1行もありません');
+    } catch(err) {
+      alert('シートの読み込みに失敗しました:\n' + err.message);
+      return;
+    }
+
+    // --- フェーズ3: 列名の確認（デバッグ用ログ） ---
+    const actualCols = Object.keys(rows[0] || {});
+    console.log('[Excel import] 実際の列名:', actualCols);
+    console.log('[Excel import] シート名:', wb.SheetNames[0], '/ 行数:', rows.length);
+
+    // 列名の表記ゆれに対応するエイリアス（実際の列名 → 正規化後の列名）
+    const colAlias = {
+      // WBS番号
+      'WBS番号': 'WBS_番号', 'WBS_No': 'WBS_番号', 'WBS No': 'WBS_番号',
+      // アウトラインレベル
+      'アウトラインレベル': 'アウトライン_レベル', 'アウトライン レベル': 'アウトライン_レベル',
+      'アウトライン_レベル': 'アウトライン_レベル',
+      // アウトラインフィールド
+      'アウトラインフィールド': 'アウトラインフィールド',
+      'アウトライン_フィールド': 'アウトラインフィールド',
+      'アウトライン フィールド': 'アウトラインフィールド',
+      // 先行タスク
+      '先行タスク': '先行タスク', '先行 タスク': '先行タスク',
+    };
+
+    // 行データのキーをエイリアス解決した形に正規化する関数
+    function normalizeRow(row) {
+      const out = {};
+      Object.entries(row).forEach(([k, v]) => {
+        const normalized = colAlias[k] || k;
+        out[normalized] = v;
+      });
+      return out;
+    }
+
+    // --- フェーズ4: データ変換 ---
+    try {
       const colMap = {
         'ID':'id','WBS_番号':'wbs','アウトライン_レベル':'level','タスク名':'name',
         'Note':'note','期間':'duration','開始日':'start','終了日':'end',
@@ -903,31 +962,53 @@ document.getElementById('excel-file-input').addEventListener('change', function(
         'クリティカル':'critical','アクティブ':'active','アウトラインフィールド':'isSummaryRaw'
       };
       const DATE_FIELDS = ['start','end','bstart','bend','astart','aend'];
-      state.tasks = rows.map((row, i) => {
+
+      state.tasks = rows.map((rawRow, i) => {
+        const row = normalizeRow(rawRow);
         const t = {};
         Object.entries(colMap).forEach(([jp, en]) => {
           t[en] = row[jp] !== undefined ? row[jp] : (en === 'isSummaryRaw' ? '' : null);
         });
         t.id = parseInt(t.id) || (i + 1);
         t.level = parseInt(t.level) || 1;
-        // 達成率: 0〜1 の小数 → 0〜100 の整数に変換
-        const rawPct = parseFloat(String(t.pct || '0').replace('%',''));
-        if (!isNaN(rawPct)) {
-          t.pct = rawPct <= 1.0 && rawPct >= 0 && String(t.pct || '').indexOf('%') === -1
-            ? Math.round(rawPct * 100)
-            : Math.round(rawPct);
-        } else {
+
+        // 達成率: ExcelのDate serial誤読を防ぎつつ 0〜1小数→0〜100整数に変換
+        const pctRaw = t.pct;
+        if (pctRaw instanceof Date) {
+          // SheetJS がシリアル値を誤ってDateと解釈した場合は0扱い
           t.pct = 0;
+        } else {
+          const rawPct = parseFloat(String(pctRaw == null ? '0' : pctRaw).replace('%', '').trim());
+          if (isNaN(rawPct)) {
+            t.pct = 0;
+          } else if (rawPct <= 1.0 && rawPct >= 0 && !String(pctRaw || '').includes('%')) {
+            // 0〜1 の小数（%記号なし） → ×100
+            t.pct = Math.round(rawPct * 100);
+          } else {
+            t.pct = Math.round(rawPct);
+          }
         }
-        // 日付列: 文字列 → Date オブジェクトに変換
+
+        // 日付列: Date / 文字列 → Date または null に変換
         DATE_FIELDS.forEach(f => { t[f] = parseExcelDate(t[f]); });
+
         t.isSummary = t.isSummaryRaw === 'はい' || t.level === 1;
         return t;
       });
+    } catch(err) {
+      console.error('Excel data transform error:', err);
+      alert('データの変換中にエラーが発生しました:\n' + err.message + '\n\n' + (err.stack || ''));
+      return;
+    }
+
+    // --- フェーズ5: ステータス計算・描画 ---
+    try {
       computeAllStatuses();
       renderScreen();
+      console.log('[Excel import] 完了。タスク数:', state.tasks.length);
     } catch(err) {
-      alert('Excelの読み込みに失敗しました: ' + err.message);
+      console.error('Render error after Excel import:', err);
+      alert('読み込みは成功しましたが、画面の描画中にエラーが発生しました:\n' + err.message + '\n\n' + (err.stack || ''));
     }
   };
   reader.readAsArrayBuffer(file);
