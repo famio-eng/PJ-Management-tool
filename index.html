@@ -86,10 +86,14 @@ body.dark .tl-label-bg{fill:#16213e}
 body.dark .tl-label-sep{stroke:#2a3a5c}
 /* Gantt split layout */
 #gantt-wrap{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden}
+#gantt-divider{width:5px;flex-shrink:0;background:#c8d0e0;cursor:col-resize;transition:background .15s}
+#gantt-divider:hover,#gantt-divider.resizing{background:#4472C4}
+body.dark #gantt-divider{background:#3a3a5c}
+body.dark #gantt-divider:hover,body.dark #gantt-divider.resizing{background:#4472C4}
 .gantt-split-outer{display:flex;overflow:hidden}
 .gantt-left{max-height:calc(100vh - 140px)}
 .gantt-right{max-height:calc(100vh - 140px)}
-.gantt-left{flex-shrink:0;overflow:hidden;overflow-y:scroll;scrollbar-width:none;border-right:2px solid #c8d0e0}
+.gantt-left{flex-shrink:0;overflow:hidden;overflow-y:scroll;scrollbar-width:none}
 .gantt-left::-webkit-scrollbar{display:none}
 .gantt-right{flex:1;overflow:auto;min-width:0}
 /* Fixed columns table */
@@ -503,7 +507,7 @@ const state = {
   nwSelectedId: null,
   nwSubDepth: 2,
   nwDeptFilter: 'all',
-  ganttWeeks: 13,
+  ganttPeriod: '3m',
   deptTab: 'Pj-L',
   comments: {},
   actions: [],
@@ -1683,7 +1687,7 @@ window.showNWSubPanel = async function(id) {
   }
 
   // Embed data as JSON literal; escape </ to prevent HTML parser from closing the script tag early
-  const dataJson = JSON.stringify({ tasks: state.tasks, focusId: id, title: title, depth: depth })
+  const dataJson = JSON.stringify({ tasks: state.tasks, focusId: id, title: title, depth: depth, isDark: document.body.classList.contains('dark') })
     .replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
   const html = buildSubgraphWindowHTML(d3src, dataJson);
@@ -1716,6 +1720,15 @@ svg{display:block;width:100%;height:100%}
 label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}
 #dv{font-size:12px;font-weight:700;min-width:14px}
 #tip{position:fixed;background:rgba(30,30,50,.88);color:#fff;font-size:11px;padding:6px 10px;border-radius:5px;pointer-events:none;display:none;z-index:9999;line-height:1.5}
+body.dark{background:#1a1a2e;color:#e0e0e0}
+body.dark #hdr{background:#16213e;border-color:#3a3a5c;color:#e0e0e0}
+body.dark #hdr h2{color:#90b8e0}
+body.dark #ctnr{background:#0f1923}
+body.dark svg{background:#0f1923}
+body.dark .btn{background:#1e2a45;border-color:#3a3a5c;color:#ccc}
+body.dark .btn:hover{background:#243555}
+body.dark label{color:#aaa}
+body.dark #dv{color:#ccc}
 </style></head><body>
 <div id="hdr">
   <h2>サブグラフ: <span id="ft"></span></h2>
@@ -1731,6 +1744,7 @@ label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}
 <script>
 var _data = ${dataJson};
 var ALL = _data.tasks || [], fid = _data.focusId || 0, dep = _data.depth || 2, _z, _sv;
+if (_data.isDark) document.body.classList.add('dark');
 document.title = "サブグラフ: " + (_data.title || fid);
 document.getElementById("ft").textContent = _data.title || fid;
 document.getElementById("ds").value = dep;
@@ -1833,13 +1847,19 @@ draw();
 // =====================================================================
 // SCREEN 4: GANTT CHART
 // =====================================================================
+const GANTT_PERIODS = [
+  {key:'2w', label:'2週'},
+  {key:'1m', label:'1ヶ月'},
+  {key:'3m', label:'3ヶ月'},
+  {key:'6m', label:'6ヶ月'},
+];
+
 function renderGantt() {
-  const weekOptions = [2, 4, 13, 26, 52];
   document.getElementById('content').innerHTML = `
     <div class="section" style="padding:0">
       <div class="gantt-controls">
-        <span style="font-size:12px;color:#666">表示週数:</span>
-        ${weekOptions.map(w => `<button class="btn btn-sm ${state.ganttWeeks===w?'btn-primary':'btn-outline'}" onclick="setGanttWeeks(${w})">${w}週</button>`).join('')}
+        <span style="font-size:12px;color:#666">表示期間:</span>
+        ${GANTT_PERIODS.map(p => `<button class="btn btn-sm ${state.ganttPeriod===p.key?'btn-primary':'btn-outline'}" onclick="setGanttPeriod('${p.key}')">${p.label}</button>`).join('')}
         <span style="width:8px"></span>
         <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="全固定列の幅をコンテンツに合わせて最適化">列幅自動調整</button>
         <span style="flex:1"></span>
@@ -1853,7 +1873,7 @@ function renderGantt() {
   drawGantt();
 }
 
-window.setGanttWeeks = function(w) { state.ganttWeeks = w; renderGantt(); };
+window.setGanttPeriod = function(p) { state.ganttPeriod = p; renderGantt(); };
 
 function getMonday(date) {
   const d = new Date(date);
@@ -1875,13 +1895,26 @@ function getWeekKey(dateStr) {
   return `${start.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
 }
 
+function computeGanttRange(period, rd) {
+  const DAY = 86400000, WEEK = 7 * DAY;
+  const monday = getMonday(rd);
+  if (period === '2w') {
+    return { startWeek: new Date(monday.getTime() - WEEK), weeks: 4 };
+  }
+  const monthStart = new Date(rd.getFullYear(), rd.getMonth(), 1);
+  const months = period === '1m' ? 1 : period === '3m' ? 3 : 6;
+  const periodEnd = new Date(rd.getFullYear(), rd.getMonth() + months, 0);
+  const startWeek = getMonday(new Date(monthStart.getTime() - DAY));
+  const endWeek   = getMonday(new Date(periodEnd.getTime() + WEEK));
+  const weeks = Math.max(1, Math.round((endWeek - startWeek) / WEEK));
+  return { startWeek, weeks };
+}
+
 function drawGantt() {
   const wrap = document.getElementById('gantt-wrap');
   if (!wrap) return;
   const rd = toDate(state.reportDate);
-  const monday = getMonday(rd);
-  const weeks = state.ganttWeeks;
-  const startWeek = new Date(monday.getTime() - Math.floor(weeks * 0.3) * 7 * 86400000);
+  const { startWeek, weeks } = computeGanttRange(state.ganttPeriod || '3m', rd);
 
   const weekDates = [];
   for (let i = 0; i < weeks; i++) weekDates.push(new Date(startWeek.getTime() + i * 7 * 86400000));
@@ -1989,12 +2022,36 @@ function drawGantt() {
   });
   R += '</tbody></table>';
 
-  wrap.innerHTML = `<div class="gantt-split-outer"><div class="gantt-left" id="gantt-left">${L}</div><div class="gantt-right" id="gantt-right">${R}</div></div>`;
+  wrap.innerHTML = `<div class="gantt-split-outer"><div class="gantt-left" id="gantt-left">${L}</div><div id="gantt-divider"></div><div class="gantt-right" id="gantt-right">${R}</div></div>`;
 
   // Vertical scroll sync: right panel drives left panel
   const gRight = document.getElementById('gantt-right');
   const gLeft  = document.getElementById('gantt-left');
   if (gRight && gLeft) gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+
+  // ── Divider drag: resize left panel ──
+  const divider = document.getElementById('gantt-divider');
+  const savedSplit = localStorage.getItem('pj_gantt_split');
+  if (savedSplit) gLeft.style.width = savedSplit;
+  if (divider && gLeft) {
+    divider.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      divider.classList.add('resizing');
+      const startX = e.clientX, startW = gLeft.offsetWidth;
+      const onMove = (ev) => {
+        const w = Math.max(100, startW + ev.clientX - startX);
+        gLeft.style.width = w + 'px';
+      };
+      const onUp = () => {
+        divider.classList.remove('resizing');
+        localStorage.setItem('pj_gantt_split', gLeft.offsetWidth + 'px');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
 
   enhanceGanttTable(wrap);
 }
