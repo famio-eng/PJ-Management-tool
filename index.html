@@ -776,6 +776,16 @@ function toDate(s) {
   return parseExcelDate(s);
 }
 
+function formatDate(d, fallback) {
+  if (fallback === undefined) fallback = '—';
+  const dt = (d instanceof Date) ? d : toDate(d);
+  if (!dt) return fallback;
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function daysBetween(a, b) {
   if (!a || !b) return 0;
   return Math.round((b - a) / 86400000);
@@ -1104,7 +1114,7 @@ function renderDashboard() {
           <td style="white-space:nowrap;color:#888;font-size:11px">${t.wbs}</td>
           <td>${t.name}</td>
           <td><span class="text-muted">${t.resource||''}</span></td>
-          <td style="white-space:nowrap">${t.bend||'—'}</td>
+          <td style="white-space:nowrap">${formatDate(t.bend)}</td>
           <td>${pctBar(t.pct)}</td>
           <td>${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
           <td><span class="nw-icon" onclick="jumpToNW(${t.id})" title="NW図で表示">🔗</span></td>
@@ -1124,7 +1134,7 @@ function renderDashboard() {
             <td style="font-size:11px;color:#888">${t.wbs}</td>
             <td>${t.name}</td>
             <td class="text-muted">${t.resource||''}</td>
-            <td style="white-space:nowrap">${t.bstart||'—'}</td>
+            <td style="white-space:nowrap">${formatDate(t.bstart)}</td>
             <td>${statusBadge(t.status)}</td>
           </tr>`).join('')}
         </tbody>
@@ -1140,7 +1150,7 @@ function renderDashboard() {
             <td style="font-size:11px;color:#888">${t.wbs}</td>
             <td>${t.name}</td>
             <td class="text-muted">${t.resource||''}</td>
-            <td style="white-space:nowrap">${t.bend||'—'}</td>
+            <td style="white-space:nowrap">${formatDate(t.bend)}</td>
             <td>${pctBar(t.pct)}</td>
           </tr>`).join('')}
         </tbody>
@@ -1305,8 +1315,8 @@ function buildTLTaskListHTML() {
         <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
       </td>
       <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${isCritical ? '🔴 ' : ''}${name}</td>
-      <td style="padding:3px 6px">${t.bstart || ''}</td>
-      <td style="padding:3px 6px">${t.bend || ''}</td>
+      <td style="padding:3px 6px">${formatDate(t.bstart, '')}</td>
+      <td style="padding:3px 6px">${formatDate(t.bend, '')}</td>
       <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
       <td style="padding:3px 6px">${t.status || ''}</td>
     </tr>`;
@@ -1558,7 +1568,7 @@ function drawTimeline() {
             .attr('x', x1).attr('y', barY).attr('width', x2 - x1).attr('height', barH)
             .attr('fill', color).attr('opacity', row.level <= 2 ? .85 : .7).attr('rx', 2)
             .on('mouseover', (e) => showTooltip(e,
-              `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${row.bstart?.toLocaleDateString('ja-JP')} 〜 ${row.bend?.toLocaleDateString('ja-JP')}${row.status ? '<br>ステータス: ' + row.status : ''}${row.critical ? '<br>🔴 クリティカルパス' : ''}`))
+              `${row.name}<br>担当: ${row.resource||'—'}<br>基準: ${formatDate(row.bstart)} 〜 ${formatDate(row.bend)}${row.status ? '<br>ステータス: ' + row.status : ''}${row.critical ? '<br>🔴 クリティカルパス' : ''}`))
             .on('mouseout', hideTooltip);
           // Critical path: red border
           if (row.critical) {
@@ -1582,7 +1592,7 @@ function drawTimeline() {
             .attr('width', x2 - x1).attr('height', aBarH)
             .attr('fill', '#A0A0A0').attr('opacity', .85).attr('rx', 1)
             .on('mouseover', (e) => showTooltip(e,
-              `${row.name}<br>実績: ${row.astart?.toLocaleDateString('ja-JP')} 〜 ${row.aend ? row.aend.toLocaleDateString('ja-JP') : 'TODAY'}`))
+              `${row.name}<br>実績: ${formatDate(row.astart)} 〜 ${row.aend ? formatDate(row.aend) : 'TODAY'}`))
             .on('mouseout', hideTooltip);
         }
       }
@@ -1928,11 +1938,11 @@ function selectNWNode(id) {
       </div>
       <div class="nw-detail-cell">
         <span class="nw-detail-label">基準開始日</span>
-        <span class="nw-detail-val">${task.bstart||'—'}</span>
+        <span class="nw-detail-val">${formatDate(task.bstart)}</span>
       </div>
       <div class="nw-detail-cell">
         <span class="nw-detail-label">基準終了日</span>
-        <span class="nw-detail-val">${task.bend||'—'}</span>
+        <span class="nw-detail-val">${formatDate(task.bend)}</span>
       </div>
       <div class="nw-detail-cell">
         <span class="nw-detail-label">CP</span>
@@ -2526,8 +2536,8 @@ function renderMeeting() {
           <td style="font-size:10px;color:#888;white-space:nowrap">${t.wbs}</td>
           <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
           <td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>
-          <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
-          <td style="white-space:nowrap;font-size:11px">${t.end||'—'}</td>
+          <td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>
+          <td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>
           <td>${pctBar(t.pct)}</td>
           <td>${statusBadge(t.status)}</td>
           <td>
@@ -2660,11 +2670,11 @@ function renderDept() {
     return `<tr>
       <td style="font-size:10px;color:#888">${t.wbs}</td>
       <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
-      <td style="white-space:nowrap;font-size:11px">${t.bstart||'—'}</td>
-      <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
+      <td style="white-space:nowrap;font-size:11px">${formatDate(t.bstart)}</td>
+      <td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>
       <td>${pctBar(t.pct)}</td>
-      <td style="white-space:nowrap;font-size:11px">${t.start||'—'}</td>
-      <td style="white-space:nowrap;font-size:11px">${t.end||'—'}</td>
+      <td style="white-space:nowrap;font-size:11px">${formatDate(t.start)}</td>
+      <td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>
       <td>${statusBadge(t.status)}</td>
       <td>
         <textarea class="comment-input${saved?' saved':''}" id="dc_${t.id}"
