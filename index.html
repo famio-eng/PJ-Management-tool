@@ -1655,32 +1655,54 @@ window.showNWContextMenu = function(event, id) {
   }, 10);
 };
 
-// NW subgraph — Blob URL approach (avoids document.write CDN-script blocking)
-window.showNWSubPanel = function(id) {
+window.closeNWSubPanel = function() { /* new-window approach: no-op */ };
+window.closeNWSubModal = window.closeNWSubPanel;
+
+// D3 source cache — fetched once, embedded inline in subgraph popup to avoid CDN/CSP issues
+let _d3SourceCache = null;
+async function _fetchD3Source() {
+  if (_d3SourceCache) return _d3SourceCache;
+  try {
+    const r = await fetch('https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js');
+    if (r.ok) _d3SourceCache = await r.text();
+  } catch(e) {}
+  return _d3SourceCache;
+}
+
+// NW subgraph — Blob URL + inline D3 + embedded data (no CDN, no window.opener)
+window.showNWSubPanel = async function(id) {
   if (!id) return;
   const depth = state.nwSubPanelDepth || 2;
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
-  window._nwSubData = { tasks: state.tasks, focusId: id, title: title, depth: depth };
-  const blob = new Blob([buildSubgraphWindowHTML()], {type: 'text/html;charset=utf-8'});
+
+  const d3src = await _fetchD3Source();
+  if (!d3src) {
+    alert('D3ライブラリの取得に失敗しました。インターネット接続を確認してページをリロードしてください。');
+    return;
+  }
+
+  // Embed data as JSON literal; escape </ to prevent HTML parser from closing the script tag early
+  const dataJson = JSON.stringify({ tasks: state.tasks, focusId: id, title: title, depth: depth })
+    .replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+
+  const html = buildSubgraphWindowHTML(d3src, dataJson);
+  const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
   const blobUrl = URL.createObjectURL(blob);
   const win = window.open(blobUrl, '_blank',
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
   if (!win) { URL.revokeObjectURL(blobUrl); alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
   win.focus();
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 };
 
-window.closeNWSubPanel = function() { /* new-window approach: no-op */ };
-window.closeNWSubModal = window.closeNWSubPanel;
-
-function buildSubgraphWindowHTML() {
-  // Blob URL approach: browser navigates TO this page, so CDN <script> loads normally.
-  // Functions are at top level (not in IIFE) so HTML onclick/oninput attributes can call them.
-  // Data read from window.opener._nwSubData (same origin as Blob URL).
+function buildSubgraphWindowHTML(d3src, dataJson) {
+  // D3 is inlined (no CDN dependency).
+  // Data is embedded as a JSON literal (no window.opener dependency).
+  // All functions are at top level so HTML onclick/oninput attrs can call them.
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>
+<script>${d3src}<\/script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}
@@ -1707,7 +1729,7 @@ label{font-size:12px;color:#555;display:flex;align-items:center;gap:6px}
 <div id="ctnr"><svg id="sv"></svg></div>
 <div id="tip"></div>
 <script>
-var _data = (window.opener && window.opener._nwSubData) || {};
+var _data = ${dataJson};
 var ALL = _data.tasks || [], fid = _data.focusId || 0, dep = _data.depth || 2, _z, _sv;
 document.title = "サブグラフ: " + (_data.title || fid);
 document.getElementById("ft").textContent = _data.title || fid;
@@ -1782,7 +1804,7 @@ function draw() {
     ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg).attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);
     if(icp&&!ic){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}
     ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#aaa":"#888").text(n.wbs);
-    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…"):"";
+    var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…":""):"";
     ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);
     if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);
     ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#bbb":"#ddd").attr("stroke-width",1);
