@@ -215,3 +215,22 @@ https://github.com/famio-eng/PJ-Management-tool
 6. 全変更後、ブラウザコンソールにエラーが出ないことを確認すること
 7. **LocalStorageキーの変更は破壊的変更**。既存データとの互換性を慎重に扱い、移行コードを追加すること
 8. **新規ウィンドウへのD3描画**: `document.write()` + CDN方式はChrome非対応。Blob URL方式を使い、ポップアップ内関数はIIFE外（トップレベル）に定義すること
+
+---
+
+## Phase 3 将来構想（未実装・検討中）
+
+### Power Automate × Teams 定例リマインド投稿
+- 概要：Power Automateからブラウザアプリにアクセスしてスクリーンショットをキャプチャし、
+  対象のTeamsチームスレッドに進捗サマリーとして自動投稿する
+- 想定トリガー：定例前日の指定時刻（例：毎週水曜17:00）
+- 投稿内容候補：
+  - ダッシュボードのKPIカードのスクリーンショット
+  - Delayタスク一覧
+  - 今後2週間のタスク一覧
+- 技術的な実現手段：
+  - Power Automate → Seleniumクラウド or Power Automate Desktop
+    でブラウザ操作＋スクリーンショット取得
+  - Teams「チャネルにメッセージを投稿」アクションで送信
+- 前提条件：Power Automate Desktopのライセンス確認（IT部門）
+- ステータス：未実装・Phase3以降で検討

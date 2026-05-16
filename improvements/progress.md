@@ -91,3 +91,5 @@ localStorage.removeItem('pj_column_widths_gantt'); // 旧キー強制削除
 - ガントチャートの `enhanceGanttTable()` と `applyColResize()` でコード重複あり（将来的に統合が望ましい）
 - 列幅のLocalStorageキー命名規則が画面ごとに異なり、整理が必要
 - ダークモードとD3描画エリアの色同期が一部未完全
+- Phase3構想：Power Automate+Teams自動投稿リマインドは未実装。
+  plan.mdのPhase3セクションに詳細記載。IT部門へのライセンス確認が前提。
