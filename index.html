@@ -91,22 +91,25 @@ body.dark .tl-label-sep{stroke:#2a3a5c}
 body.dark #gantt-divider{background:#3a3a5c}
 body.dark #gantt-divider:hover,body.dark #gantt-divider.resizing{background:#4472C4}
 .gantt-split-outer{display:flex;overflow:hidden}
-.gantt-left{max-height:calc(100vh - 140px)}
-.gantt-right{max-height:calc(100vh - 140px)}
-.gantt-left{flex:0 0 auto;min-width:50px;overflow-x:auto;overflow-y:scroll;scrollbar-width:thin}
+.gantt-left{flex:0 0 auto;min-width:50px;max-height:calc(100vh - 140px);overflow-x:auto;overflow-y:hidden}
 .gantt-left::-webkit-scrollbar{width:0;height:6px}
 .gantt-left::-webkit-scrollbar-thumb{background:#c8d0e0;border-radius:3px}
-.gantt-right{flex:1;overflow:auto;min-width:80px}
+.gantt-right{flex:1;max-height:calc(100vh - 140px);overflow:auto;min-width:80px;scrollbar-width:auto;scrollbar-color:#7a8fc0 #dde4f0}
+.gantt-right::-webkit-scrollbar{width:12px;height:12px}
+.gantt-right::-webkit-scrollbar-track{background:#dde4f0}
+.gantt-right::-webkit-scrollbar-thumb{background:#7a8fc0;border-radius:6px}
+.gantt-right::-webkit-scrollbar-corner{background:#dde4f0}
 /* Fixed columns table */
 .gantt-fixed-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed;border-right:none}
 .gantt-fixed-tbl th,.gantt-fixed-tbl td{border:1px solid #e8e8e8;padding:0;overflow:hidden}
-.gantt-fixed-tbl thead th{background:#f5f7fa;font-weight:600;font-size:10px;padding:4px 5px;height:52px;white-space:nowrap;position:relative;vertical-align:middle;text-align:left}
+.gantt-fixed-tbl thead th{background:#f5f7fa;font-weight:600;font-size:10px;padding:4px 5px;height:52px;white-space:nowrap;position:sticky;top:0;z-index:3;vertical-align:middle;text-align:left}
 .gantt-fixed-tbl tbody td{height:26px;padding:3px 5px;white-space:nowrap;vertical-align:middle;box-sizing:border-box}
 /* Calendar table */
 .gantt-cal-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed}
 .gantt-cal-tbl th,.gantt-cal-tbl td{border:1px solid #e8e8e8;padding:0}
 .gantt-cal-tbl .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:2px;height:26px;width:22px;box-sizing:border-box}
-.gantt-cal-tbl .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px;height:26px}
+.gantt-cal-tbl .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px;height:26px;position:sticky;top:0;z-index:3}
+.gantt-cal-tbl .gt-header{position:sticky;top:26px;z-index:3}
 .gantt-bar-cell{width:22px;padding:0;position:relative;height:26px;box-sizing:border-box}
 .gantt-bar-base{position:absolute;height:14px;top:6px;border-radius:2px;background:#4472C4;opacity:.6}
 .gantt-bar-actual{position:absolute;height:14px;top:6px;border-radius:2px;background:#00B050;opacity:.85}
@@ -238,6 +241,9 @@ body.dark .gantt-fixed-tbl .gantt-summary-row td{background:#1a2535!important}
 body.dark .gantt-cal-tbl .today-bg{background:#2c2010!important}
 body.dark .gantt-fixed-tbl tbody td{color:#d0d8e8}
 body.dark #gantt-wrap,.dark .gantt-left,.dark .gantt-right{background:#16213e}
+body.dark .gantt-right{scrollbar-color:#4a5a8a #1a2540}
+body.dark .gantt-right::-webkit-scrollbar-track{background:#1a2540}
+body.dark .gantt-right::-webkit-scrollbar-thumb{background:#4a5a8a}
 body.dark .gantt-table td { background: #16213e; }
 /* Section headings in dark mode */
 body.dark .section h2 { color: #90b8e0; border-left-color: #4472C4; }
@@ -2093,15 +2099,40 @@ function drawGantt() {
       e.preventDefault();
       divider.classList.add('resizing');
       const startX = e.clientX, startLeftW = gLeft.offsetWidth;
+      // Capture initial column widths for proportional scaling
+      const _ftbl = document.getElementById('gantt-fixed-tbl');
+      const startColWidths = _ftbl
+        ? [..._ftbl.querySelectorAll('thead th')].map(th => parseFloat(th.style.width) || th.offsetWidth)
+        : [];
       const onMove = (ev) => {
         const delta = ev.clientX - startX;
         const outerW = splitOuter.offsetWidth;
-        // Right panel must keep at least 80px; left must keep at least 50px
         const maxLeft = Math.max(50, outerW - 80 - 5);
-        gLeft.style.width = Math.min(maxLeft, Math.max(50, startLeftW + delta)) + 'px';
+        const newLeftW = Math.min(maxLeft, Math.max(50, startLeftW + delta));
+        gLeft.style.width = newLeftW + 'px';
+        // Scale info columns proportionally with the panel
+        if (startLeftW > 0 && startColWidths.length) {
+          const ratio = newLeftW / startLeftW;
+          const fixedTbl = document.getElementById('gantt-fixed-tbl');
+          const ths = fixedTbl ? [...fixedTbl.querySelectorAll('thead th')] : [];
+          let totalW = 0;
+          ths.forEach((th, i) => {
+            const w = Math.max(20, Math.round((startColWidths[i] || 80) * ratio));
+            th.style.width = w + 'px';
+            totalW += w;
+          });
+          if (fixedTbl && totalW > 0) fixedTbl.style.width = totalW + 'px';
+        }
       };
       const onUp = () => {
         divider.classList.remove('resizing');
+        // Persist new column widths
+        const fixedTbl = document.getElementById('gantt-fixed-tbl');
+        if (fixedTbl) {
+          const ws = {};
+          [...fixedTbl.querySelectorAll('thead th')].forEach((t, i) => { ws[i] = t.offsetWidth + 'px'; });
+          localStorage.setItem('pj_column_widths_gantt_fixed', JSON.stringify(ws));
+        }
         localStorage.setItem('pj_gantt_left_w', gLeft.style.width);
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
@@ -2530,11 +2561,14 @@ function measureColContentWidth(th, colIdx, tableEl) {
 
 function autoFitCols(ths, tableEl, storageKey) {
   const ws = {};
+  let total = 0;
   ths.forEach((th, i) => {
     const w = measureColContentWidth(th, i, tableEl);
     th.style.width = w + 'px'; th.style.minWidth = '0';
     ws[i] = w + 'px';
+    total += w;
   });
+  if (total > 0) tableEl.style.width = total + 'px';
   localStorage.setItem(storageKey, JSON.stringify(ws));
 }
 
@@ -2799,7 +2833,6 @@ function enhanceGanttTable(wrap) {
   }
 
   fixedThs.forEach((th, i) => {
-    th.style.position = 'relative';
     if (hasSavedW && savedW[i]) th.style.width = savedW[i];
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
@@ -2841,7 +2874,17 @@ function enhanceGanttTable(wrap) {
   // ── Auto-fit button ──
   const autoFitBtn = (wrap.parentElement || document).querySelector('.gantt-auto-fit-btn');
   if (autoFitBtn) {
-    autoFitBtn.onclick = () => { autoFitCols(fixedThs, fixedTbl, resizeKey); };
+    autoFitBtn.onclick = () => {
+      autoFitCols(fixedThs, fixedTbl, resizeKey);
+      requestAnimationFrame(() => {
+        syncFixedTblWidth();
+        const gLeft = document.getElementById('gantt-left');
+        if (gLeft) {
+          gLeft.style.width = fixedTbl.offsetWidth + 'px';
+          localStorage.setItem('pj_gantt_left_w', gLeft.style.width);
+        }
+      });
+    };
   }
 
   // ── Filter ──
