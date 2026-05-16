@@ -6,7 +6,8 @@
 <title>PJ進捗管理ツール</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://alcdn.msauth.net/browser/3.27.0/js/msal-browser.min.js"></script>
+<!-- MSAL.js: Phase2 M365連携は一時断念中。再開時は下行を有効化すること -->
+<!-- <script src="https://alcdn.msauth.net/browser/3.27.0/js/msal-browser.min.js"></script> -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',sans-serif;font-size:13px;background:#f0f2f5;display:flex;height:100vh;overflow:hidden;color:#333}
@@ -309,7 +310,8 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
       <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
       <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 印刷</button>
       <button id="night-toggle" onclick="toggleTheme()" title="ダーク/ライトモード切替">🌙</button>
-      <div id="auth-area">
+      <!-- Phase2 M365ログインUI: Azure AD連携断念中のため非表示 -->
+      <div id="auth-area" style="display:none">
         <span id="auth-user-display" style="display:none"></span>
         <button id="auth-btn" class="btn btn-outline btn-sm" onclick="msalSignIn()">🔐 M365ログイン</button>
       </div>
