@@ -220,6 +220,29 @@ body.dark .mtg-upcoming-start{background:#3d2e00;color:#ffcc80}
 body.dark .mtg-upcoming-end{background:#1b3320;color:#a5d6a7}
 body.dark .mtg-cp{background:#3d1515;color:#ef9a9a}
 body.dark .sidebar-footer .btn-outline{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.8)}
+/* Settings modal tabs */
+.settings-tab{padding:6px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:500;color:#888;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s}
+.settings-tab.active{color:#1a3a5c;border-bottom-color:#1a3a5c}
+.settings-tab:hover:not(.active){color:#444}
+body.dark .settings-tab.active{color:#90b8e0;border-bottom-color:#4472C4}
+body.dark .settings-tab:hover:not(.active){color:#ccc}
+/* Toast notification */
+#toast-container{position:fixed;top:60px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:#2e7d32;color:#fff;padding:10px 18px;border-radius:6px;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:0;transform:translateY(-8px);transition:opacity .3s,transform .3s;pointer-events:none;max-width:340px;line-height:1.5}
+.toast.show{opacity:1;transform:translateY(0)}
+/* Project selector */
+.pj-selector-wrap{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.15)}
+.pj-selector-wrap select{width:100%;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#fff;border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer}
+.pj-selector-wrap select option{background:#1a3a5c;color:#fff}
+body.dark .pj-selector-wrap select{border-color:rgba(255,255,255,.2)}
+/* Alias rows in settings */
+.alias-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.alias-row input{flex:1;border:1px solid #ccc;border-radius:3px;padding:4px 7px;font-size:12px}
+body.dark .alias-row input{background:#1a1a2e;border-color:#3a3a5c;color:#e0e0e0}
+/* Sort button */
+.sort-btn{font-size:10px;margin-left:2px;cursor:pointer;color:#bbb;border:none;background:none;padding:1px 2px;vertical-align:middle;user-select:none}
+.sort-btn.asc,.sort-btn.desc{color:#4472C4;font-weight:700}
+body.dark .sort-btn.asc,body.dark .sort-btn.desc{color:#90b8e0}
 /* Night mode toggle */
 #night-toggle{background:none;border:1px solid #ccc;border-radius:20px;padding:3px 8px;cursor:pointer;font-size:15px;transition:all .2s;line-height:1}
 #night-toggle:hover{background:rgba(0,0,0,.08)}
@@ -283,6 +306,13 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
 <!-- ===== SIDEBAR ===== -->
 <div id="sidebar">
   <div class="sidebar-logo">📊 PJ進捗管理</div>
+  <div class="pj-selector-wrap">
+    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-bottom:4px">プロジェクト</div>
+    <div style="display:flex;gap:4px;align-items:center">
+      <select id="pj-select" style="flex:1" onchange="switchProject(this.value)"></select>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:3px 7px;font-size:11px;flex-shrink:0" onclick="openAddProjectModal()" title="プロジェクトを追加">＋</button>
+    </div>
+  </div>
   <div class="sidebar-info">
     <div id="sb-pj-name" style="font-weight:600;color:#fff;margin-bottom:2px">医療機器開発PJ-A</div>
     <div>次回定例予定日: <span id="sb-report-date">2026-05-18</span></div>
@@ -309,6 +339,7 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
       <label>次回定例予定日: <input type="date" id="input-report-date" style="border:1px solid #ccc;border-radius:4px;padding:3px 7px;font-size:12px"></label>
       <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
       <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 印刷</button>
+      <button class="btn btn-outline btn-sm" onclick="openSettingsModal()">⚙ 設定</button>
       <button id="night-toggle" onclick="toggleTheme()" title="ダーク/ライトモード切替">🌙</button>
       <!-- Phase2 M365ログインUI: Azure AD連携断念中のため非表示 -->
       <div id="auth-area" style="display:none">
@@ -354,6 +385,59 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
   </div>
 </div>
 
+<!-- ===== SETTINGS MODAL ===== -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal" style="width:580px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">⚙ 設定</h3>
+      <button class="btn btn-sm btn-outline" onclick="closeModal('settings-modal')">✕</button>
+    </div>
+    <div style="display:flex;gap:0;margin-bottom:0;border-bottom:2px solid #e0e0e0">
+      <button class="settings-tab active" onclick="switchSettingsTab('visible-cols',this)">表示列</button>
+      <button class="settings-tab" onclick="switchSettingsTab('alias',this)">エイリアス</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:12px 0">
+      <div id="settings-tab-visible-cols">
+        <div style="font-size:11px;color:#888;margin-bottom:10px">チェックON＝表示・OFF＝非表示。「適用」で即時反映します。</div>
+        <div id="visible-cols-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px"></div>
+      </div>
+      <div id="settings-tab-alias" style="display:none">
+        <div style="font-size:11px;color:#888;margin-bottom:10px">ExcelのリソースNを内部名に正規化します（カンマ区切りの各部門名に個別適用）。</div>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:6px;align-items:center;font-size:11px;font-weight:600;margin-bottom:6px;padding:0 2px">
+          <span>Excelの値</span><span></span><span>正規化後</span><span></span>
+        </div>
+        <div id="alias-list"></div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="addAliasRow()">＋ 追加</button>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid #e0e0e0;flex-shrink:0">
+      <button class="btn btn-outline" onclick="closeModal('settings-modal')">閉じる</button>
+      <button class="btn btn-primary" onclick="applySettings()">適用</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ADD PROJECT MODAL ===== -->
+<div class="modal-overlay" id="add-project-modal">
+  <div class="modal">
+    <h3>＋ プロジェクト登録</h3>
+    <div class="form-row">
+      <label>プロジェクト名</label>
+      <input type="text" id="new-pj-name" placeholder="例: 医療機器開発PJ-A">
+    </div>
+    <div class="file-area" style="margin-bottom:8px">
+      <input type="file" id="new-pj-file" accept=".xlsx,.xls" style="display:none">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('new-pj-file').click()">📂 Excelファイルを選択</button>
+      <div id="new-pj-filename" style="margin-top:6px;font-size:11px;color:#888">ファイル未選択</div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('add-project-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="confirmAddProject()">登録</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
 <div class="tooltip" id="tooltip"></div>
 
 <script>
@@ -515,6 +599,52 @@ function getDeptColor(resource) {
   return DEPT_COLORS[depts[0]] || '#4472C4';
 }
 
+// All configurable columns (A-1)
+const ALL_COLUMNS = [
+  {key:'id',       label:'ID',               defaultOn:false},
+  {key:'wbs',      label:'WBS番号',           defaultOn:false},
+  {key:'level',    label:'アウトラインレベル', defaultOn:false},
+  {key:'name',     label:'タスク名',           defaultOn:true},
+  {key:'note',     label:'Note',              defaultOn:false},
+  {key:'duration', label:'期間',              defaultOn:false},
+  {key:'start',    label:'開始日',            defaultOn:true},
+  {key:'end',      label:'終了日',            defaultOn:true},
+  {key:'bstart',   label:'基準開始日',        defaultOn:false},
+  {key:'bend',     label:'基準終了日',        defaultOn:false},
+  {key:'astart',   label:'実績開始日',        defaultOn:false},
+  {key:'aend',     label:'実績終了日',        defaultOn:false},
+  {key:'remain',   label:'残存期間',          defaultOn:false},
+  {key:'pred',     label:'先行タスク',        defaultOn:false},
+  {key:'succ',     label:'後続タスク',        defaultOn:false},
+  {key:'resource', label:'リソース名',        defaultOn:true},
+  {key:'pct',      label:'達成率',            defaultOn:true},
+  {key:'status_col',label:'ステータス',       defaultOn:true},
+  {key:'deliverable',label:'成果物',          defaultOn:false},
+  {key:'critical', label:'クリティカル',      defaultOn:false},
+  {key:'active',   label:'アクティブ',        defaultOn:false},
+  {key:'progress', label:'進捗状況',          defaultOn:true},
+];
+
+function isColVisible(key) {
+  const vc = state.visibleColumns;
+  if (!vc) { const c = ALL_COLUMNS.find(x => x.key === key); return c ? c.defaultOn : true; }
+  if (key in vc) return vc[key];
+  const c = ALL_COLUMNS.find(x => x.key === key);
+  return c ? c.defaultOn : true;
+}
+
+function showToast(msg, type) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.style.background = type === 'error' ? '#c62828' : '#2e7d32';
+  toast.textContent = msg;
+  container.appendChild(toast);
+  requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+  setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 350); }, 3000);
+}
+
 // =====================================================================
 // APP STATE
 // =====================================================================
@@ -535,6 +665,12 @@ const state = {
   collapsedRows: new Set(),
   tlSelectedIds: new Set(),
   tlExpandedIds: new Set(),
+  // Phase 1b additions
+  visibleColumns: null,
+  aliasList: [],
+  projectList: [],
+  currentProjectName: null,
+  tlCollapseState: {},
 };
 
 // =====================================================================
@@ -738,6 +874,11 @@ function loadStorage() {
     state.timelineItems = JSON.parse(localStorage.getItem('pj_timeline_items') || '[]');
     const _sel = JSON.parse(localStorage.getItem('pj_tl_selected') || 'null');
     if (_sel) state.tlSelectedIds = new Set(_sel);
+    // Phase 1b
+    try { const vc = localStorage.getItem('pj_visible_columns'); if (vc) state.visibleColumns = JSON.parse(vc); } catch(e) {}
+    try { const am = localStorage.getItem('pj_alias_map'); if (am) state.aliasList = JSON.parse(am); } catch(e) {}
+    try { const pl = localStorage.getItem('pj_project_list'); if (pl) state.projectList = JSON.parse(pl); } catch(e) {}
+    try { const tlc = localStorage.getItem('pj_timeline_collapsed'); if (tlc) state.tlCollapseState = JSON.parse(tlc); } catch(e) {}
   } catch(e) { console.warn('Storage load failed', e); }
 }
 
@@ -906,135 +1047,91 @@ function updateSidebarInfo() {
 // =====================================================================
 // EXCEL IMPORT
 // =====================================================================
+
+function applyAliasMap(resource) {
+  if (!resource || !state.aliasList || !state.aliasList.length) return resource;
+  const parts = resource.split(',').map(s => s.trim());
+  return parts.map(p => { const a = state.aliasList.find(x => x.from === p); return a ? a.to : p; }).join(', ');
+}
+
+function processExcelRows(rows) {
+  const colAlias = {
+    'WBS番号':'WBS_番号','WBS_No':'WBS_番号','WBS No':'WBS_番号',
+    'アウトラインレベル':'アウトライン_レベル','アウトライン レベル':'アウトライン_レベル',
+    'アウトライン_レベル':'アウトライン_レベル',
+    'アウトラインフィールド':'アウトラインフィールド',
+    'アウトライン_フィールド':'アウトラインフィールド',
+    'アウトライン フィールド':'アウトラインフィールド',
+    '先行タスク':'先行タスク','先行 タスク':'先行タスク',
+  };
+  function normalizeRow(row) {
+    const out = {};
+    Object.entries(row).forEach(([k,v]) => { out[colAlias[k]||k] = v; });
+    return out;
+  }
+  const colMap = {
+    'ID':'id','WBS_番号':'wbs','アウトライン_レベル':'level','タスク名':'name',
+    'Note':'note','期間':'duration','開始日':'start','終了日':'end',
+    '基準開始日':'bstart','基準終了日':'bend','実績開始日':'astart','実績終了日':'aend',
+    '残存期間':'remain','先行タスク':'pred','リソース名':'resource','達成率':'pct',
+    'クリティカル':'critical','アクティブ':'active','アウトラインフィールド':'isSummaryRaw'
+  };
+  const DATE_FIELDS = ['start','end','bstart','bend','astart','aend'];
+  const STR_FIELDS  = ['wbs','name','note','duration','remain','pred','resource','critical','active','isSummaryRaw'];
+  state.tasks = rows.map((rawRow, i) => {
+    const row = normalizeRow(rawRow);
+    const t = {};
+    Object.entries(colMap).forEach(([jp,en]) => {
+      t[en] = row[jp] !== undefined ? row[jp] : (en==='isSummaryRaw' ? '' : null);
+    });
+    STR_FIELDS.forEach(f => {
+      if (t[f]==null||t[f]===''){t[f]=f==='isSummaryRaw'?'':null;return;}
+      if (t[f] instanceof Date){t[f]=null;return;}
+      t[f]=String(t[f]).trim()||null;
+    });
+    if (t.pred==null) t.pred='';
+    t.id=parseInt(t.id)||(i+1);
+    t.level=parseInt(t.level)||1;
+    const pctRaw=t.pct;
+    if(pctRaw instanceof Date||pctRaw==null){t.pct=0;}
+    else{const rp=parseFloat(String(pctRaw).replace('%','').trim());
+      if(isNaN(rp)){t.pct=0;}
+      else if(rp<=1.0&&rp>=0&&!String(pctRaw).includes('%')){t.pct=Math.round(rp*100);}
+      else{t.pct=Math.round(rp);}}
+    DATE_FIELDS.forEach(f=>{t[f]=parseExcelDate(t[f]);});
+    t.isSummary=t.isSummaryRaw==='はい'||t.level===1;
+    if(t.resource) t.resource=applyAliasMap(t.resource);
+    return t;
+  }).filter(t=>t.name);
+}
+
 document.getElementById('excel-file-input').addEventListener('change', function(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(ev) {
-    // --- フェーズ1: XLSX パース ---
     let wb, ws, rows;
     try {
       wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
-    } catch(err) {
-      alert('XLSXファイルの解析に失敗しました（ファイル形式を確認してください）:\n' + err.message);
-      return;
-    }
-
-    // --- フェーズ2: シート取得・JSON変換 ---
+    } catch(err) { alert('XLSXファイルの解析に失敗しました:\n' + err.message); return; }
     try {
       ws = wb.Sheets[wb.SheetNames[0]];
-      if (!ws) throw new Error('シートが見つかりません。シート名: ' + wb.SheetNames.join(', '));
-      // raw:true + cellDates:true でネイティブ型（Date・数値・文字列）を取得
+      if (!ws) throw new Error('シートが見つかりません: ' + wb.SheetNames.join(', '));
       rows = XLSX.utils.sheet_to_json(ws, {raw:true, defval:null});
       if (rows.length === 0) throw new Error('シートにデータが1行もありません');
-    } catch(err) {
-      alert('シートの読み込みに失敗しました:\n' + err.message);
-      return;
-    }
-
-    // --- フェーズ3: 列名の確認（デバッグ用ログ） ---
-    const actualCols = Object.keys(rows[0] || {});
-    console.log('[Excel import] 実際の列名:', actualCols);
-    console.log('[Excel import] シート名:', wb.SheetNames[0], '/ 行数:', rows.length);
-
-    // 列名の表記ゆれに対応するエイリアス（実際の列名 → 正規化後の列名）
-    const colAlias = {
-      // WBS番号
-      'WBS番号': 'WBS_番号', 'WBS_No': 'WBS_番号', 'WBS No': 'WBS_番号',
-      // アウトラインレベル
-      'アウトラインレベル': 'アウトライン_レベル', 'アウトライン レベル': 'アウトライン_レベル',
-      'アウトライン_レベル': 'アウトライン_レベル',
-      // アウトラインフィールド
-      'アウトラインフィールド': 'アウトラインフィールド',
-      'アウトライン_フィールド': 'アウトラインフィールド',
-      'アウトライン フィールド': 'アウトラインフィールド',
-      // 先行タスク
-      '先行タスク': '先行タスク', '先行 タスク': '先行タスク',
-    };
-
-    // 行データのキーをエイリアス解決した形に正規化する関数
-    function normalizeRow(row) {
-      const out = {};
-      Object.entries(row).forEach(([k, v]) => {
-        const normalized = colAlias[k] || k;
-        out[normalized] = v;
-      });
-      return out;
-    }
-
-    // --- フェーズ4: データ変換 ---
+    } catch(err) { alert('シートの読み込みに失敗しました:\n' + err.message); return; }
+    console.log('[Excel import] 列名:', Object.keys(rows[0]||{}), '/ 行数:', rows.length);
     try {
-      const colMap = {
-        'ID':'id','WBS_番号':'wbs','アウトライン_レベル':'level','タスク名':'name',
-        'Note':'note','期間':'duration','開始日':'start','終了日':'end',
-        '基準開始日':'bstart','基準終了日':'bend','実績開始日':'astart','実績終了日':'aend',
-        '残存期間':'remain','先行タスク':'pred','リソース名':'resource','達成率':'pct',
-        'クリティカル':'critical','アクティブ':'active','アウトラインフィールド':'isSummaryRaw'
-      };
-      const DATE_FIELDS = ['start','end','bstart','bend','astart','aend'];
-      // raw:true で数値になりうるが、アプリ側で文字列として扱うフィールド
-      const STR_FIELDS  = ['wbs','name','note','duration','remain','pred','resource',
-                           'critical','active','isSummaryRaw'];
-
-      state.tasks = rows.map((rawRow, i) => {
-        const row = normalizeRow(rawRow);
-        const t = {};
-        Object.entries(colMap).forEach(([jp, en]) => {
-          t[en] = row[jp] !== undefined ? row[jp] : (en === 'isSummaryRaw' ? '' : null);
-        });
-
-        // 数値・その他型 → 文字列に正規化（.startsWith/.split 等を安全に呼ぶため）
-        STR_FIELDS.forEach(f => {
-          if (t[f] == null || t[f] === '') { t[f] = f === 'isSummaryRaw' ? '' : null; return; }
-          if (t[f] instanceof Date) { t[f] = null; return; } // 誤判定されたDate → null
-          t[f] = String(t[f]).trim() || null;
-        });
-        // pred が null の場合は空文字にしておく（後続で !t.pred チェックが効く）
-        if (t.pred == null) t.pred = '';
-
-        t.id = parseInt(t.id) || (i + 1);
-        t.level = parseInt(t.level) || 1;
-
-        // 達成率: raw:true で 0〜1 小数 or 整数で来る → 0〜100 整数に変換
-        const pctRaw = t.pct;
-        if (pctRaw instanceof Date || pctRaw == null) {
-          t.pct = 0;
-        } else {
-          const rawPct = parseFloat(String(pctRaw).replace('%', '').trim());
-          if (isNaN(rawPct)) {
-            t.pct = 0;
-          } else if (rawPct <= 1.0 && rawPct >= 0 && !String(pctRaw).includes('%')) {
-            // 0〜1 の小数（%記号なし） → ×100
-            t.pct = Math.round(rawPct * 100);
-          } else {
-            t.pct = Math.round(rawPct);
-          }
-        }
-
-        // 日付列: Date / 文字列 / 数値シリアル → Date または null に変換
-        DATE_FIELDS.forEach(f => { t[f] = parseExcelDate(t[f]); });
-
-        t.isSummary = t.isSummaryRaw === 'はい' || t.level === 1;
-        return t;
-      }).filter(t => t.name); // タスク名がない空行を除去
-    } catch(err) {
-      console.error('Excel data transform error:', err);
-      alert('データの変換中にエラーが発生しました:\n' + err.message + '\n\n' + (err.stack || ''));
-      return;
-    }
-
-    // --- フェーズ5: ステータス計算・描画 ---
-    try {
+      processExcelRows(rows);
       computeAllStatuses();
       renderScreen();
-      console.log('[Excel import] 完了。タスク数:', state.tasks.length);
+      showToast(`✅ Excelを読み込みました（${state.tasks.length}件）`);
     } catch(err) {
       console.error('Render error after Excel import:', err);
-      // alert より選択・コピーしやすいページ内エラー表示
       const msg = err.message + '\n' + (err.stack || '');
       const box = document.createElement('div');
       box.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;background:#fff3f3;border:2px solid #e53935;border-radius:8px;padding:16px;max-width:600px;max-height:80vh;overflow:auto;font-family:monospace;font-size:12px;white-space:pre-wrap;box-shadow:0 4px 16px rgba(0,0,0,0.3)';
-      box.innerHTML = '<b style="color:#e53935">⚠ 描画エラー（選択してコピーしてください）</b>\n\n' + msg.replace(/</g,'&lt;');
+      box.innerHTML = '<b style="color:#e53935">⚠ 描画エラー</b>\n\n' + msg.replace(/</g,'&lt;');
       box.innerHTML += '\n\n<button onclick="this.parentNode.remove()" style="margin-top:8px;padding:4px 12px;cursor:pointer">閉じる</button>';
       document.body.appendChild(box);
     }
@@ -1176,6 +1273,55 @@ function renderDashboard() {
   </div>`;
 
   document.getElementById('content').innerHTML = html;
+
+  // A-5: column reorder for delay/upcoming tables
+  const tbls = document.querySelectorAll('#content table');
+  tbls.forEach((tbl, i) => {
+    if (tbl.querySelector('tbody tr')) {
+      enhanceTable(tbl, 'dashboard_' + i);
+    }
+  });
+
+  // A-6: sort for delay tasks table (first table)
+  const delayTbl = document.querySelector('#content .section table');
+  if (delayTbl) applyTableSort(delayTbl);
+}
+
+function applyTableSort(tableEl) {
+  const thead = tableEl.querySelector('thead');
+  if (!thead) return;
+  const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
+  if (!headerRow) return;
+  let sortCol = -1, sortDir = 0;
+  [...headerRow.cells].forEach((th, ci) => {
+    th.querySelectorAll('.sort-btn').forEach(b => b.remove());
+    const btn = document.createElement('button');
+    btn.className = 'sort-btn';
+    btn.textContent = '↕';
+    btn.title = 'ソート';
+    th.appendChild(btn);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (sortCol === ci) { sortDir = (sortDir + 1) % 3; }
+      else { sortCol = ci; sortDir = 1; }
+      headerRow.querySelectorAll('.sort-btn').forEach(b => { b.className = 'sort-btn'; b.textContent = '↕'; });
+      if (sortDir === 0) { btn.textContent = '↕'; sortCol = -1; }
+      else { btn.className = 'sort-btn ' + (sortDir === 1 ? 'asc' : 'desc'); btn.textContent = sortDir === 1 ? '↑' : '↓'; }
+      const tbody = tableEl.querySelector('tbody');
+      if (!tbody) return;
+      const rows = [...tbody.querySelectorAll('tr')];
+      if (sortDir === 0) {
+        rows.sort((a, b) => parseInt(a.dataset.origIdx||0) - parseInt(b.dataset.origIdx||0));
+      } else {
+        rows.sort((a, b) => {
+          const va = a.cells[ci]?.textContent.trim() || '';
+          const vb = b.cells[ci]?.textContent.trim() || '';
+          return sortDir === 1 ? va.localeCompare(vb, 'ja') : vb.localeCompare(va, 'ja');
+        });
+      }
+      rows.forEach((r, i) => { if (!r.dataset.origIdx) r.dataset.origIdx = i; tbody.appendChild(r); });
+    });
+  });
 }
 
 // =====================================================================
@@ -1236,13 +1382,19 @@ function buildTLRows() {
   const childrenOf = buildChildrenMap();
   const parentOf = buildParentMap();
 
-  // A task is visible if: selected AND (no selected parent OR parent is expanded)
+  // A task is visible if: selected AND not hidden by collapse AND (no selected parent OR parent expanded)
   function isVisible(t) {
     if (!state.tlSelectedIds.has(t.id)) return false;
+    // A-8: check collapse state
+    let cpid = parentOf[t.id];
+    while (cpid != null) {
+      if (state.tlCollapseState[cpid]) return false;
+      cpid = parentOf[cpid];
+    }
     const pid = parentOf[t.id];
     if (pid == null) return true;
-    if (!state.tlSelectedIds.has(pid)) return true; // parent not selected → show independently
-    return state.tlExpandedIds.has(pid);            // parent selected → only if expanded
+    if (!state.tlSelectedIds.has(pid)) return true;
+    return state.tlExpandedIds.has(pid);
   }
 
   const rows = [];
@@ -1284,47 +1436,93 @@ function buildTLRows() {
   return rows;
 }
 
-// Build task list panel HTML (all tasks with checkboxes)
+// Build task list panel HTML (all tasks with checkboxes) — A-7/A-8
 function buildTLTaskListHTML() {
   if (!state.tasks.length) return '<p style="padding:12px;color:#888">タスクなし</p>';
   const activeTasks = state.tasks.filter(t => t.active !== 'いいえ');
   const allChecked = activeTasks.length > 0 && activeTasks.every(t => state.tlSelectedIds.has(t.id));
-  const someChecked = activeTasks.some(t => state.tlSelectedIds.has(t.id));
 
-  let html = `<table style="width:100%;border-collapse:collapse;font-size:11px">
-    <thead><tr style="background:#f0f4fa;position:sticky;top:0;z-index:1">
-      <th style="width:28px;padding:4px 6px;text-align:center">
-        <input type="checkbox" id="tl-chk-all" ${allChecked ? 'checked' : ''} onchange="toggleAllTLTasks(this.checked)">
+  const parentOf = buildParentMap();
+  const childrenOf = buildChildrenMap();
+
+  const showBstart   = isColVisible('bstart');
+  const showBend     = isColVisible('bend');
+  const showResource = isColVisible('resource');
+  const showStatus   = isColVisible('status_col');
+
+  let html = `<table id="tl-task-list-tbl" style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">
+    <thead><tr id="tl-tasklist-header" style="background:#f0f4fa;position:sticky;top:0;z-index:1">
+      <th style="width:28px;padding:4px 6px;text-align:center;position:relative">
+        <input type="checkbox" id="tl-chk-all" ${allChecked?'checked':''} onchange="toggleAllTLTasks(this.checked)">
       </th>
-      <th style="text-align:left;padding:4px 6px">タスク名</th>
-      <th style="width:82px;padding:4px 6px">基準開始</th>
-      <th style="width:82px;padding:4px 6px">基準終了</th>
-      <th style="width:64px;padding:4px 6px">担当</th>
-      <th style="width:64px;padding:4px 6px">ステータス</th>
-    </tr></thead><tbody>`;
+      <th style="text-align:left;padding:4px 6px;position:relative">タスク名</th>`;
+  if (showBstart)   html += `<th style="width:82px;padding:4px 6px;position:relative">基準開始</th>`;
+  if (showBend)     html += `<th style="width:82px;padding:4px 6px;position:relative">基準終了</th>`;
+  if (showResource) html += `<th style="width:70px;padding:4px 6px;position:relative">担当</th>`;
+  if (showStatus)   html += `<th style="width:70px;padding:4px 6px;position:relative">ステータス</th>`;
+  html += '</tr></thead><tbody>';
 
   activeTasks.forEach(t => {
+    // Check if hidden by ancestor collapse (A-8)
+    let hidden = false;
+    let pid = parentOf[t.id];
+    while (pid != null) {
+      if (state.tlCollapseState[pid]) { hidden = true; break; }
+      pid = parentOf[pid];
+    }
+
     const checked = state.tlSelectedIds.has(t.id);
     const indent = (t.level - 1) * 14;
     const bold = t.level <= 2;
     const rowCls = t.level === 1 ? 'tl-list-l1' : t.level === 2 ? 'tl-list-l2' : '';
     const isCritical = t.critical === 'はい';
-    const name = (t.name || '').length > 32 ? (t.name || '').slice(0, 31) + '…' : (t.name || '');
-    html += `<tr class="${rowCls}" style="border-bottom:1px solid #f0f0f0">
+    const name = (t.name || '').length > 30 ? (t.name||'').slice(0,29)+'…' : (t.name||'');
+
+    // Has children in active tasks?
+    const hasChildren = (childrenOf[t.id]||[]).some(cid => activeTasks.find(tt => tt.id===cid));
+    const isCollapsed = !!state.tlCollapseState[t.id];
+    const toggleBtn = hasChildren
+      ? `<span style="cursor:pointer;margin-right:3px;color:#4472C4;font-size:10px" onclick="toggleTLCollapse(${t.id})">${isCollapsed?'▶':'▼'}</span>`
+      : `<span style="display:inline-block;width:14px"></span>`;
+
+    html += `<tr class="${rowCls}" style="border-bottom:1px solid #f0f0f0${hidden?';display:none':''}" data-tl-task="${t.id}">
       <td style="text-align:center;padding:3px 6px">
-        <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
+        <input type="checkbox" data-tid="${t.id}" ${checked?'checked':''} onchange="toggleTLTask(${t.id},this.checked)">
       </td>
-      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${isCritical ? '🔴 ' : ''}${name}</td>
-      <td style="padding:3px 6px">${formatDate(t.bstart, '')}</td>
-      <td style="padding:3px 6px">${formatDate(t.bend, '')}</td>
-      <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
-      <td style="padding:3px 6px">${t.status || ''}</td>
-    </tr>`;
+      <td style="padding:3px 6px 3px ${6+indent}px;font-weight:${bold?'600':'400'}${isCritical?';color:#e53935':''}">${toggleBtn}${isCritical?'🔴 ':''}${name}</td>`;
+    if (showBstart)   html += `<td style="padding:3px 6px">${formatDate(t.bstart,'')}</td>`;
+    if (showBend)     html += `<td style="padding:3px 6px">${formatDate(t.bend,'')}</td>`;
+    if (showResource) html += `<td style="padding:3px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource||''}</td>`;
+    if (showStatus)   html += `<td style="padding:3px 6px">${t.status||''}</td>`;
+    html += '</tr>';
   });
 
   html += '</tbody></table>';
   return html;
 }
+
+window.toggleTLCollapse = function(id) {
+  state.tlCollapseState[id] = !state.tlCollapseState[id];
+  localStorage.setItem('pj_timeline_collapsed', JSON.stringify(state.tlCollapseState));
+  const parentOf = buildParentMap();
+  const activeTasks = state.tasks.filter(t => t.active !== 'いいえ');
+  activeTasks.forEach(t => {
+    const row = document.querySelector(`[data-tl-task="${t.id}"]`);
+    if (!row) return;
+    let hidden = false;
+    let pid = parentOf[t.id];
+    while (pid != null) {
+      if (state.tlCollapseState[pid]) { hidden = true; break; }
+      pid = parentOf[pid];
+    }
+    row.style.display = hidden ? 'none' : '';
+    if (t.id === id) {
+      const btn = row.querySelector('span[onclick^="toggleTLCollapse"]');
+      if (btn) btn.textContent = state.tlCollapseState[id] ? '▶' : '▼';
+    }
+  });
+  drawTimeline();
+};
 
 window.toggleTLTask = function(id, checked) {
   if (checked) state.tlSelectedIds.add(id);
@@ -1407,13 +1605,30 @@ function renderTimeline() {
         <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
         <span id="tl-panel-arrow">▼</span>
       </div>
-      <div id="tl-task-list" style="max-height:280px;overflow-y:auto">
+      <div id="tl-task-list" style="overflow-y:auto">
         ${buildTLTaskListHTML()}
       </div>
     </div>`;
 
   drawTimeline();
   scrollTLToday();
+
+  // A-7: apply column resize to task list table
+  const tlTbl = document.getElementById('tl-task-list-tbl');
+  if (tlTbl) applyColResize(tlTbl, 'timeline');
+
+  // A-9: adjust task list height to fill remaining viewport
+  adjustTLHeight();
+  window._tlResizeHandler = adjustTLHeight;
+  window.addEventListener('resize', window._tlResizeHandler);
+}
+
+function adjustTLHeight() {
+  const taskList = document.getElementById('tl-task-list');
+  if (!taskList) { window.removeEventListener('resize', window._tlResizeHandler); return; }
+  const rect = taskList.getBoundingClientRect();
+  const remaining = window.innerHeight - rect.top - 8;
+  taskList.style.maxHeight = Math.max(120, remaining) + 'px';
 }
 
 window.setTLZoom = function(z) {
@@ -1637,6 +1852,172 @@ document.getElementById('tl-type').addEventListener('change', function() {
   document.getElementById('tl-date-row1').querySelector('label').textContent = isMS ? '日付' : '開始日';
   document.getElementById('tl-date-row2').style.display = isMS ? 'none' : '';
 });
+
+// =====================================================================
+// SETTINGS MODAL (A-1, A-3)
+// =====================================================================
+window.openSettingsModal = function() {
+  initVisibleColsUI();
+  initAliasUI();
+  openModal('settings-modal');
+};
+
+window.switchSettingsTab = function(tab, btn) {
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('settings-tab-visible-cols').style.display = tab==='visible-cols' ? '' : 'none';
+  document.getElementById('settings-tab-alias').style.display = tab==='alias' ? '' : 'none';
+};
+
+function initVisibleColsUI() {
+  const list = document.getElementById('visible-cols-list');
+  if (!list) return;
+  list.innerHTML = '';
+  ALL_COLUMNS.forEach(col => {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = isColVisible(col.key);
+    cb.dataset.colKey = col.key;
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(col.label));
+    list.appendChild(lbl);
+  });
+}
+
+function initAliasUI() {
+  const list = document.getElementById('alias-list');
+  if (!list) return;
+  list.innerHTML = '';
+  (state.aliasList || []).forEach(a => list.appendChild(createAliasRowEl(a.from, a.to)));
+}
+
+function createAliasRowEl(from, to) {
+  const row = document.createElement('div');
+  row.className = 'alias-row';
+  const inp1 = document.createElement('input');
+  inp1.type='text'; inp1.placeholder='Excelの値'; inp1.value=from||'';
+  const arr = document.createElement('span');
+  arr.style.cssText='color:#888;font-size:12px;flex-shrink:0'; arr.textContent='→';
+  const inp2 = document.createElement('input');
+  inp2.type='text'; inp2.placeholder='正規化後'; inp2.value=to||'';
+  const del = document.createElement('button');
+  del.className='btn btn-sm';
+  del.style.cssText='background:#fef;border:1px solid #fcc;font-size:11px;flex-shrink:0';
+  del.textContent='削除'; del.onclick=()=>row.remove();
+  row.appendChild(inp1); row.appendChild(arr); row.appendChild(inp2); row.appendChild(del);
+  return row;
+}
+
+window.addAliasRow = function() {
+  const list = document.getElementById('alias-list');
+  if (list) list.appendChild(createAliasRowEl('',''));
+};
+
+window.applySettings = function() {
+  const vc = {};
+  document.querySelectorAll('#visible-cols-list input[type=checkbox]').forEach(cb => { vc[cb.dataset.colKey]=cb.checked; });
+  state.visibleColumns = vc;
+  const aliasList = [];
+  document.querySelectorAll('#alias-list .alias-row').forEach(row => {
+    const inputs = row.querySelectorAll('input[type=text]');
+    const from = inputs[0]?.value?.trim(), to = inputs[1]?.value?.trim();
+    if (from && to) aliasList.push({from, to});
+  });
+  state.aliasList = aliasList;
+  localStorage.setItem('pj_visible_columns', JSON.stringify(vc));
+  localStorage.setItem('pj_alias_map', JSON.stringify(aliasList));
+  closeModal('settings-modal');
+  renderScreen();
+  showToast('✅ 設定を適用しました');
+};
+
+// =====================================================================
+// PROJECT MANAGEMENT (A-4)
+// =====================================================================
+function initProjectSelector() {
+  const sel = document.getElementById('pj-select');
+  if (!sel) return;
+  const list = state.projectList || [];
+  sel.innerHTML = list.length === 0
+    ? '<option value="">（サンプルデータ）</option>'
+    : list.map((p,i) => `<option value="${i}"${state.currentProjectName===p.name?' selected':''}>${p.name}${p.lastLoaded?' ('+p.lastLoaded+')':''}</option>`).join('');
+}
+
+window.switchProject = function(idx) {
+  const p = state.projectList[parseInt(idx)];
+  if (!p || !p.data) return;
+  try {
+    const rawRows = JSON.parse(p.data);
+    processExcelRows(rawRows);
+    state.currentProjectName = p.name;
+    state.projectName = p.name;
+    state.tlSelectedIds.clear(); state.tlExpandedIds.clear();
+    computeAllStatuses();
+    updateSidebarInfo();
+    renderScreen();
+    showToast('📂 ' + p.name + ' を読み込みました');
+  } catch(e) {
+    console.error('Project load error', e);
+    alert('プロジェクトの読み込みに失敗しました: ' + e.message);
+  }
+};
+
+window.openAddProjectModal = function() {
+  document.getElementById('new-pj-name').value = '';
+  document.getElementById('new-pj-filename').textContent = 'ファイル未選択';
+  const fi = document.getElementById('new-pj-file');
+  if (fi) fi.value = '';
+  openModal('add-project-modal');
+};
+
+(function() {
+  const fi = document.getElementById('new-pj-file');
+  if (fi) fi.addEventListener('change', function() {
+    document.getElementById('new-pj-filename').textContent = this.files[0] ? this.files[0].name : 'ファイル未選択';
+  });
+})();
+
+window.confirmAddProject = function() {
+  const name = document.getElementById('new-pj-name').value.trim();
+  if (!name) { alert('プロジェクト名を入力してください'); return; }
+  const file = document.getElementById('new-pj-file').files[0];
+  if (!file) { alert('Excelファイルを選択してください'); return; }
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error('シートが見つかりません');
+      const rows = XLSX.utils.sheet_to_json(ws, {raw:true, defval:null});
+      const dataStr = JSON.stringify(rows);
+      const existing = state.projectList.findIndex(p => p.name === name);
+      const entry = {name, lastLoaded: new Date().toISOString().slice(0,10), data: dataStr};
+      if (existing >= 0) state.projectList[existing] = entry;
+      else state.projectList.push(entry);
+      try {
+        localStorage.setItem('pj_project_list', JSON.stringify(state.projectList));
+      } catch(e2) {
+        alert('ファイルが大きすぎます。直接読み込みモードを使用してください。');
+        if (existing < 0) state.projectList.pop();
+        closeModal('add-project-modal');
+        return;
+      }
+      state.currentProjectName = name;
+      state.projectName = name;
+      processExcelRows(rows);
+      state.tlSelectedIds.clear(); state.tlExpandedIds.clear();
+      computeAllStatuses();
+      updateSidebarInfo();
+      initProjectSelector();
+      closeModal('add-project-modal');
+      renderScreen();
+      showToast('✅ ' + name + ' を登録しました');
+    } catch(e) { alert('Excelの読み込みに失敗しました: ' + e.message); }
+  };
+  reader.readAsArrayBuffer(file);
+};
 
 // =====================================================================
 // SCREEN 3: NW GRAPH
@@ -2527,9 +2908,9 @@ function renderMeeting() {
   function sectionTable(sectionTasks, sectionId) {
     if (sectionTasks.length === 0) return '<p class="text-muted" style="padding:8px 0">該当タスクなし</p>';
     return `<table>
-      <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>予測終了日</th><th>達成率</th><th>ステータス</th><th>進捗コメント</th><th>期限</th></tr></thead>
+      <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>予測終了日</th><th>達成率</th><th>ステータス</th><th>進捗コメント</th></tr></thead>
       <tbody>${sectionTasks.map(t => {
-        const ck = `${t.id}_${weekKey}`;
+        const ck = `meeting_${t.id}_${weekKey}`;
         const c = state.comments[ck] || {};
         const saved = !!c.comment;
         return `<tr>
@@ -2543,10 +2924,8 @@ function renderMeeting() {
           <td>
             <textarea class="comment-input${saved?' saved':''}" id="mc_${t.id}"
               onchange="saveMeetingComment(${t.id},'${weekKey}',this.value)"
-              placeholder="コメントを入力...">${c.comment||''}</textarea>
+              placeholder="コメントを入力..." style="width:100%;min-height:38px">${c.comment||''}</textarea>
           </td>
-          <td><input type="date" value="${c.deadline||''}" style="border:1px solid #ddd;border-radius:3px;padding:2px 4px;font-size:10px;width:110px"
-            onchange="saveCommentDeadline(${t.id},'${weekKey}',this.value)"></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -2604,7 +2983,7 @@ function renderMeeting() {
 }
 
 window.saveMeetingComment = function(taskId, weekKey, comment) {
-  const ck = `${taskId}_${weekKey}`;
+  const ck = `meeting_${taskId}_${weekKey}`;
   if (!state.comments[ck]) state.comments[ck] = {taskId, weekKey};
   state.comments[ck].comment = comment;
   state.comments[ck].savedAt = new Date().toISOString();
@@ -2639,7 +3018,10 @@ function renderDept() {
   computeAllStatuses();
   const dept = state.deptTab;
   const weekKey = getWeekKey(state.reportDate);
-  const tasks = state.tasks.filter(t => !t.isSummary && (t.resource || '').split(',').map(s => s.trim()).includes(dept));
+  const isAll = dept === 'All';
+  const tasks = isAll
+    ? state.tasks.filter(t => !t.isSummary && t.active === 'はい')
+    : state.tasks.filter(t => !t.isSummary && (t.resource || '').split(',').map(s => s.trim()).includes(dept));
   const allTasks = state.tasks;
 
   // Past 3 weeks
@@ -2650,26 +3032,28 @@ function renderDept() {
     pastWeeks.push(getWeekKey(d.toISOString().slice(0, 10)));
   }
 
-  const tabsHtml = DEPTS.map(d =>
+  const tabsHtml = ['All', ...DEPTS].map(d =>
     `<div class="dept-tab${d === dept ? ' active' : ''}" onclick="setDeptTab('${d}')">${d}</div>`
   ).join('');
 
   const rows = tasks.map(t => {
-    const ck = `${t.id}_${weekKey}`;
+    const ck = `dept_${t.id}_${weekKey}`;
     const c = state.comments[ck] || {};
     const saved = !!c.comment;
-    const authorKey = `author_${dept}`;
+    const authorKey = `author_${isAll ? 'All' : dept}`;
     const savedAuthor = localStorage.getItem(authorKey) || (state.msalUser ? state.msalUser.name : '');
     const pastCols = pastWeeks.map(wk => {
-      const pc = state.comments[`${t.id}_${wk}`] || {};
+      const pc = state.comments[`dept_${t.id}_${wk}`] || {};
       return `<td style="font-size:10px;background:#fafafa;max-width:110px;color:#666;vertical-align:top;padding:4px">
         ${pc.comment ? `<div>${pc.comment}</div><div style="color:#aaa;font-size:9px">${pc.author||''}</div>` : '—'}
       </td>`;
     }).join('');
 
+    const resourceCol = isAll ? `<td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>` : '';
     return `<tr>
       <td style="font-size:10px;color:#888">${t.wbs}</td>
       <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+      ${resourceCol}
       <td style="white-space:nowrap;font-size:11px">${formatDate(t.bstart)}</td>
       <td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>
       <td>${pctBar(t.pct)}</td>
@@ -2678,7 +3062,7 @@ function renderDept() {
       <td>${statusBadge(t.status)}</td>
       <td>
         <textarea class="comment-input${saved?' saved':''}" id="dc_${t.id}"
-          placeholder="進捗コメントを入力...">${c.comment||''}</textarea>
+          placeholder="進捗コメントを入力..." style="width:100%;min-height:38px">${c.comment||''}</textarea>
       </td>
       <td>
         <input type="text" id="da_${t.id}" value="${c.author||savedAuthor}" placeholder="担当者名"
@@ -2692,7 +3076,7 @@ function renderDept() {
   document.getElementById('content').innerHTML = `
     <div class="dept-tabs">${tabsHtml}</div>
     <div class="section">
-      <h2 style="margin-bottom:12px">【${dept}】担当タスク一覧（${tasks.length}件）
+      <h2 style="margin-bottom:12px">【${isAll?'全部門':dept}】担当タスク一覧（${tasks.length}件）
         <span class="text-muted" style="font-size:11px;font-weight:400">次回定例予定日: ${state.reportDate}（${weekKey}）</span>
       </h2>
       ${tasks.length === 0 ? '<p class="text-muted">このフィルタに該当するタスクはありません</p>' :
@@ -2700,7 +3084,7 @@ function renderDept() {
         <table>
           <thead>
             <tr>
-              <th>WBS</th><th>タスク名</th><th>基準開始</th><th>基準終了</th>
+              <th>WBS</th><th>タスク名</th>${isAll?'<th>担当部門</th>':''}<th>基準開始</th><th>基準終了</th>
               <th>達成率</th><th>予測開始</th><th>予測終了</th><th>ステータス</th>
               <th>進捗コメント</th><th>担当者名</th>
               ${pastWeeks.map(wk => `<th style="background:#f0f0f0;font-size:10px">${wk}<br>（過去）</th>`).join('')}
@@ -2719,21 +3103,19 @@ window.setDeptTab = function(dept) { state.deptTab = dept; renderDept(); };
 window.saveDeptComment = function(taskId, weekKey, dept) {
   const comment = document.getElementById(`dc_${taskId}`)?.value || '';
   const author  = document.getElementById(`da_${taskId}`)?.value || '';
-  const ck = `${taskId}_${weekKey}`;
+  const ck = `dept_${taskId}_${weekKey}`;
   state.comments[ck] = {
     taskId, weekKey,
     comment, author,
     savedAt: new Date().toISOString(),
     screen: 'dept',
   };
-  // Remember author name for this dept
   if (author) localStorage.setItem(`author_${dept}`, author);
   saveStorage();
   const el = document.getElementById(`dc_${taskId}`);
   if (el) el.classList.toggle('saved', !!comment);
-  // Flash feedback
-  const btn = el?.closest('td')?.querySelector('button');
-  if (btn) { const orig = btn.textContent; btn.textContent = '✓ 送信済み'; setTimeout(() => btn.textContent = orig, 1500); }
+  const task = state.tasks.find(t => t.id === taskId);
+  showToast(`✅ コメントを保存しました（${task?task.name:taskId}・担当：${author||'—'}）`);
 };
 
 // =====================================================================
@@ -2970,14 +3352,19 @@ function applyColFilter(tableEl, screenId) {
   const ths = [...headerRow.cells];
   const trs = [...tbody.querySelectorAll('tr')];
 
+  function getCellVals(td) {
+    const raw = td ? td.textContent.trim() : '';
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
   function applyAllFilters() {
     trs.forEach(tr => {
       let visible = true;
       Object.entries(savedFilters).forEach(([ci, allowed]) => {
         if (!allowed) return;
         const td = tr.cells[parseInt(ci)];
-        const val = td ? td.textContent.trim() : '';
-        if (!allowed.includes(val)) visible = false;
+        const cellVals = getCellVals(td);
+        if (!cellVals.some(v => allowed.includes(v))) visible = false;
       });
       tr.style.display = visible ? '' : 'none';
     });
@@ -2987,7 +3374,13 @@ function applyColFilter(tableEl, screenId) {
 
   ths.forEach((th, colIdx) => {
     th.querySelectorAll('.filter-btn').forEach(b => b.remove());
-    const vals = [...new Set(trs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
+    // A-2: split by comma for resource columns
+    const valSet = new Set();
+    trs.forEach(tr => {
+      const td = tr.cells[colIdx];
+      getCellVals(td).forEach(v => valSet.add(v));
+    });
+    const vals = [...valSet].filter(v => v);
     if (vals.length === 0) return;
 
     const btn = document.createElement('span');
@@ -3012,7 +3405,7 @@ function applyColFilter(tableEl, screenId) {
       dd.appendChild(allWrap);
 
       const itemCbs = [];
-      vals.forEach(val => {
+      vals.sort((a,b) => a.localeCompare(b,'ja')).forEach(val => {
         const lbl = document.createElement('label');
         lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer;';
         const cb = document.createElement('input');
@@ -3133,6 +3526,7 @@ function _applyColOrderByOrig(tableEl, orderByOrig) {
 
 // --- Gantt-specific enhance (fixed columns only) ---
 function enhanceGanttTable(wrap) {
+  localStorage.removeItem('pj_column_widths_gantt'); // Bug-A: 旧キー削除
   const fixedTbl = document.getElementById('gantt-fixed-tbl');
   const calTbl   = document.getElementById('gantt-cal-tbl');
   if (!fixedTbl || !calTbl) return;
@@ -3322,7 +3716,16 @@ function init() {
   loadStorage();
   initTheme();
   initMsal();
-  state.tasks = SAMPLE_TASKS.map(t => ({...t}));
+  initProjectSelector();
+  // Load last project if available, else use sample data
+  if (state.projectList.length > 0 && state.currentProjectName) {
+    const p = state.projectList.find(x => x.name === state.currentProjectName);
+    if (p && p.data) {
+      try { processExcelRows(JSON.parse(p.data)); } catch(e) { state.tasks = SAMPLE_TASKS.map(t=>({...t})); }
+    } else { state.tasks = SAMPLE_TASKS.map(t => ({...t})); }
+  } else {
+    state.tasks = SAMPLE_TASKS.map(t => ({...t}));
+  }
   computeAllStatuses();
   updateSidebarInfo();
   navigate('dashboard');
