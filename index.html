@@ -798,7 +798,7 @@ function calcStatus(task, allTasks, reportDate) {
     if (!astart && bstart && rd < bstart) return 'nActive';
     // Check children for Delay
     const children = allTasks.filter(t => {
-      if (t.id === task.id) return false;
+      if (t.id === task.id || !t.wbs || !task.wbs) return false;
       return t.wbs.startsWith(task.wbs + '.') && !t.wbs.slice(task.wbs.length + 1).includes('.');
     });
     const childStatuses = children.map(c => calcStatus(c, allTasks, reportDate));
