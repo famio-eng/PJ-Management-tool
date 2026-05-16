@@ -93,9 +93,9 @@ body.dark #gantt-divider:hover,body.dark #gantt-divider.resizing{background:#447
 .gantt-split-outer{display:flex;overflow:hidden}
 .gantt-left{max-height:calc(100vh - 140px)}
 .gantt-right{max-height:calc(100vh - 140px)}
-.gantt-left{flex-shrink:0;overflow:hidden;overflow-y:scroll;scrollbar-width:none}
+.gantt-left{flex:1;min-width:0;overflow:hidden;overflow-y:scroll;scrollbar-width:none}
 .gantt-left::-webkit-scrollbar{display:none}
-.gantt-right{flex:1;overflow:auto;min-width:0}
+.gantt-right{flex:0 0 auto;overflow:auto;min-width:80px}
 /* Fixed columns table */
 .gantt-fixed-tbl{border-collapse:collapse;font-size:11px;table-layout:fixed;border-right:none}
 .gantt-fixed-tbl th,.gantt-fixed-tbl td{border:1px solid #e8e8e8;padding:0;overflow:hidden}
@@ -1853,15 +1853,18 @@ const GANTT_PERIODS = [
   {key:'3m', label:'3ヶ月'},
   {key:'6m', label:'6ヶ月'},
 ];
+// Default column width (px) per period mode
+const GANTT_COL_W = {'2w':52, '1m':70, '3m':100, '6m':130};
 
 function renderGantt() {
   document.getElementById('content').innerHTML = `
     <div class="section" style="padding:0">
       <div class="gantt-controls">
-        <span style="font-size:12px;color:#666">表示期間:</span>
+        <span style="font-size:12px;color:#666">列の期間:</span>
         ${GANTT_PERIODS.map(p => `<button class="btn btn-sm ${state.ganttPeriod===p.key?'btn-primary':'btn-outline'}" onclick="setGanttPeriod('${p.key}')">${p.label}</button>`).join('')}
         <span style="width:8px"></span>
-        <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="全固定列の幅をコンテンツに合わせて最適化">列幅自動調整</button>
+        <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="タスク情報列の幅をコンテンツに合わせて最適化">情報列幅調整</button>
+        <button class="btn btn-sm btn-outline gantt-cal-fit-btn" title="プロジェクト全期間がカレンダー表示領域に収まるよう列幅を調整">全期間表示</button>
         <span style="flex:1"></span>
         <span style="font-size:11px;color:#888">
           <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
@@ -1895,40 +1898,75 @@ function getWeekKey(dateStr) {
   return `${start.getUTCFullYear()}-W${String(weekNum).padStart(2,'0')}`;
 }
 
-function computeGanttRange(period, rd) {
-  const DAY = 86400000, WEEK = 7 * DAY;
-  const monday = getMonday(rd);
-  if (period === '2w') {
-    return { startWeek: new Date(monday.getTime() - WEEK), weeks: 4 };
+// ── Calendar period helpers ──
+function _periodFloor(mode, d) {
+  if (mode === '2w') {
+    // Align to biweekly boundary from a fixed reference Monday (2015-01-05)
+    const monday = getMonday(d);
+    const refMs = new Date(2015, 0, 5).getTime();
+    const weeks = Math.floor((monday.getTime() - refMs) / (7 * 86400000));
+    return new Date(refMs + Math.floor(weeks / 2) * 14 * 86400000);
   }
-  const monthStart = new Date(rd.getFullYear(), rd.getMonth(), 1);
-  const months = period === '1m' ? 1 : period === '3m' ? 3 : 6;
-  const periodEnd = new Date(rd.getFullYear(), rd.getMonth() + months, 0);
-  const startWeek = getMonday(new Date(monthStart.getTime() - DAY));
-  const endWeek   = getMonday(new Date(periodEnd.getTime() + WEEK));
-  const weeks = Math.max(1, Math.round((endWeek - startWeek) / WEEK));
-  return { startWeek, weeks };
+  if (mode === '1m') return new Date(d.getFullYear(), d.getMonth(), 1);
+  if (mode === '3m') return new Date(d.getFullYear(), Math.floor(d.getMonth() / 3) * 3, 1);
+  return new Date(d.getFullYear(), d.getMonth() < 6 ? 0 : 6, 1); // 6m
+}
+
+function _periodNext(mode, start) {
+  if (mode === '2w') return new Date(start.getTime() + 14 * 86400000);
+  if (mode === '1m') return new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  if (mode === '3m') return new Date(start.getFullYear(), start.getMonth() + 3, 1);
+  return new Date(start.getFullYear(), start.getMonth() + 6, 1); // 6m
+}
+
+function _periodLabel1(mode, p) {
+  const s = p.start;
+  if (mode === '2w') return `${s.getFullYear()}/${String(s.getMonth()+1).padStart(2,'0')}`;
+  return `${s.getFullYear()}年`;
+}
+
+function _periodLabel2(mode, p) {
+  const s = p.start;
+  if (mode === '2w') return `${s.getMonth()+1}/${s.getDate()}`;
+  if (mode === '1m') return `${s.getMonth()+1}月`;
+  if (mode === '3m') return `Q${Math.floor(s.getMonth()/3)+1}`;
+  return s.getMonth() === 0 ? '上半期' : '下半期';
+}
+
+function generateCalendarPeriods(mode, tasks) {
+  const dates = tasks.flatMap(t => [toDate(t.bstart), toDate(t.bend)]).filter(Boolean);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const pMin = dates.length ? new Date(Math.min(...dates.map(d => +d))) : now;
+  const pMax = dates.length ? new Date(Math.max(...dates.map(d => +d))) : new Date(now.getFullYear()+1, now.getMonth(), now.getDate());
+  let cur = _periodFloor(mode, pMin);
+  const stop = _periodNext(mode, _periodFloor(mode, pMax));
+  const periods = [];
+  while (+cur < +stop && periods.length < 500) {
+    const next = _periodNext(mode, cur);
+    periods.push({ start: new Date(+cur), endExclusive: new Date(+next) });
+    cur = next;
+  }
+  return periods;
 }
 
 function drawGantt() {
   const wrap = document.getElementById('gantt-wrap');
   if (!wrap) return;
-  const rd = toDate(state.reportDate);
-  const { startWeek, weeks } = computeGanttRange(state.ganttPeriod || '3m', rd);
+  const mode = state.ganttPeriod || '3m';
+  const today = toDate(state.reportDate) || new Date();
+  const colW = GANTT_COL_W[mode] || 70;
 
-  const weekDates = [];
-  for (let i = 0; i < weeks; i++) weekDates.push(new Date(startWeek.getTime() + i * 7 * 86400000));
+  const periods = generateCalendarPeriods(mode, state.tasks);
 
-  const monthGroups = [];
-  let curMonth = null, curStart = 0;
-  weekDates.forEach((w, i) => {
-    const m = `${w.getFullYear()}/${String(w.getMonth()+1).padStart(2,'0')}`;
-    if (m !== curMonth) {
-      if (curMonth !== null) monthGroups.push({label:curMonth, count:i-curStart});
-      curMonth = m; curStart = i;
-    }
+  // Build row1 groups (year or month grouping for header row1)
+  const groups = [];
+  let curG = null;
+  periods.forEach(p => {
+    const lbl = _periodLabel1(mode, p);
+    if (lbl !== (curG && curG.label)) { if (curG) groups.push(curG); curG = {label:lbl, count:1}; }
+    else curG.count++;
   });
-  if (curMonth) monthGroups.push({label:curMonth, count:weekDates.length-curStart});
+  if (curG) groups.push(curG);
 
   let fixedCols = [
     {key:'id',label:'ID',w:40},{key:'wbs',label:'WBS番号',w:70},{key:'name',label:'タスク名',w:200},
@@ -1952,7 +1990,7 @@ function drawGantt() {
     if (ordered.length === fixedCols.length) fixedCols = ordered;
   }
 
-  // ── LEFT TABLE: fixed columns (table-layout:fixed → truly resizable) ──
+  // ── LEFT TABLE: fixed columns ──
   const totalDefaultWidth = fixedCols.reduce((s, c) => s + c.w, 0);
   let L = `<table class="gantt-fixed-tbl" id="gantt-fixed-tbl" style="width:${totalDefaultWidth}px"><thead><tr>`;
   fixedCols.forEach((c, i) => {
@@ -1985,38 +2023,41 @@ function drawGantt() {
   });
   L += '</tbody></table>';
 
-  // ── RIGHT TABLE: calendar columns ──
-  let R = '<table class="gantt-cal-tbl" id="gantt-cal-tbl"><thead><tr>';
-  monthGroups.forEach(mg => R += `<th class="gt-month" colspan="${mg.count}">${mg.label}</th>`);
+  // ── RIGHT TABLE: period-based calendar ──
+  const calTotalW = periods.length * colW;
+  let R = `<table class="gantt-cal-tbl" id="gantt-cal-tbl" style="width:${calTotalW}px;table-layout:fixed"><thead><tr>`;
+  groups.forEach(g => R += `<th class="gt-month" colspan="${g.count}" style="width:${g.count*colW}px">${g.label}</th>`);
   R += '</tr><tr>';
-  weekDates.forEach(w => {
-    const isToday = w <= rd && new Date(w.getTime() + 6*86400000) >= rd;
-    R += `<th class="gt-header${isToday?' today-col':''}">${w.getDate()}</th>`;
+  periods.forEach(p => {
+    const isTodayCol = +today >= +p.start && +today < +p.endExclusive;
+    R += `<th class="gt-header${isTodayCol?' today-col':''}" style="width:${colW}px">${_periodLabel2(mode, p)}</th>`;
   });
   R += '</tr></thead><tbody>';
-  const today = toDate(state.reportDate);
   visibleTasks.forEach(task => {
     const isCP = task.critical === 'はい' && !task.isSummary;
     const isSummary = task.isSummary;
     const bstart = toDate(task.bstart), bend = toDate(task.bend);
     const astart = toDate(task.astart), aend = toDate(task.aend);
     R += `<tr class="${isCP?'cp-row':''}${isSummary?' gantt-summary-row':''}" data-task-id="${task.id}">`;
-    weekDates.forEach(w => {
-      const wEnd = new Date(w.getTime() + 6*86400000);
-      const isTW = w <= today && wEnd >= today;
-      const baseOvlp = bstart && bend && bstart <= wEnd && bend >= w;
-      const actOvlp  = astart && (aend||today) && astart <= wEnd && (aend||today) >= w;
+    periods.forEach(p => {
+      const pDur = +p.endExclusive - +p.start;
+      const isTodayCell = +today >= +p.start && +today < +p.endExclusive;
+      const baseOvlp = bstart && bend && +bstart < +p.endExclusive && +bend >= +p.start;
+      const actEff   = aend || today;
+      const actOvlp  = astart && +astart < +p.endExclusive && +actEff >= +p.start;
       let cc = '<div style="position:relative;height:22px">';
       if (baseOvlp) {
-        const cs=Math.max(bstart,w), ce=Math.min(bend,wEnd), ms=7*86400000;
-        cc += `<div class="gantt-bar-base" style="left:${(cs-w)/ms*100}%;width:${(ce-cs)/ms*100}%;background:${isSummary?'#2F5597':'#4472C4'}"></div>`;
+        const cs = Math.max(+bstart, +p.start);
+        const ce = Math.min(+bend + 86400000, +p.endExclusive);
+        cc += `<div class="gantt-bar-base" style="left:${(cs-+p.start)/pDur*100}%;width:${(ce-cs)/pDur*100}%;background:${isSummary?'#2F5597':'#4472C4'}"></div>`;
       }
       if (actOvlp) {
-        const eff=aend||today, cs=Math.max(astart,w), ce=Math.min(eff,wEnd), ms=7*86400000;
-        cc += `<div class="gantt-bar-actual" style="left:${(cs-w)/ms*100}%;width:${(ce-cs)/ms*100}%"></div>`;
+        const cs = Math.max(+astart, +p.start);
+        const ce = Math.min(+actEff + 86400000, +p.endExclusive);
+        cc += `<div class="gantt-bar-actual" style="left:${(cs-+p.start)/pDur*100}%;width:${(ce-cs)/pDur*100}%"></div>`;
       }
       cc += '</div>';
-      R += `<td class="gantt-bar-cell${isTW?' today-bg':''}">${cc}</td>`;
+      R += `<td class="gantt-bar-cell${isTodayCell?' today-bg':''}" style="width:${colW}px">${cc}</td>`;
     });
     R += '</tr>';
   });
@@ -2024,33 +2065,74 @@ function drawGantt() {
 
   wrap.innerHTML = `<div class="gantt-split-outer"><div class="gantt-left" id="gantt-left">${L}</div><div id="gantt-divider"></div><div class="gantt-right" id="gantt-right">${R}</div></div>`;
 
-  // Vertical scroll sync: right panel drives left panel
   const gRight = document.getElementById('gantt-right');
   const gLeft  = document.getElementById('gantt-left');
+  const splitOuter = wrap.querySelector('.gantt-split-outer');
+
+  // Vertical scroll sync
   if (gRight && gLeft) gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
 
-  // ── Divider drag: resize left panel ──
+  // ── Right panel initial width + left min-width protection ──
+  requestAnimationFrame(() => {
+    if (!gLeft || !gRight || !splitOuter) return;
+    const fixedTbl = document.getElementById('gantt-fixed-tbl');
+    const leftNaturalW = fixedTbl ? fixedTbl.offsetWidth : totalDefaultWidth;
+    gLeft.style.minWidth = leftNaturalW + 'px';
+
+    const savedRightW = localStorage.getItem('pj_gantt_right_w');
+    if (savedRightW) {
+      gRight.style.width = savedRightW;
+    } else {
+      const outerW = splitOuter.offsetWidth || 800;
+      gRight.style.width = Math.max(200, outerW - leftNaturalW - 5) + 'px';
+    }
+  });
+
+  // ── Divider drag: controls RIGHT panel width ──
   const divider = document.getElementById('gantt-divider');
-  const savedSplit = localStorage.getItem('pj_gantt_split');
-  if (savedSplit) gLeft.style.width = savedSplit;
-  if (divider && gLeft) {
+  if (divider && gLeft && gRight) {
     divider.addEventListener('mousedown', (e) => {
       e.preventDefault();
       divider.classList.add('resizing');
-      const startX = e.clientX, startW = gLeft.offsetWidth;
+      const startX = e.clientX, startRightW = gRight.offsetWidth;
       const onMove = (ev) => {
-        const w = Math.max(100, startW + ev.clientX - startX);
-        gLeft.style.width = w + 'px';
+        // Drag RIGHT → right panel bigger; drag LEFT → right panel smaller, left expands via flex:1
+        const delta = ev.clientX - startX;
+        const fixedTbl = document.getElementById('gantt-fixed-tbl');
+        const leftNaturalW = fixedTbl ? fixedTbl.offsetWidth : totalDefaultWidth;
+        const outerW = splitOuter.offsetWidth;
+        const maxRight = Math.max(100, outerW - leftNaturalW - 5);
+        gRight.style.width = Math.min(maxRight, Math.max(80, startRightW + delta)) + 'px';
       };
       const onUp = () => {
         divider.classList.remove('resizing');
-        localStorage.setItem('pj_gantt_split', gLeft.offsetWidth + 'px');
+        localStorage.setItem('pj_gantt_right_w', gRight.style.width);
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
+  }
+
+  // ── Cal fit button: fit all periods in the right panel ──
+  const calFitBtn = (wrap.parentElement || document).querySelector('.gantt-cal-fit-btn');
+  if (calFitBtn) {
+    calFitBtn.onclick = () => {
+      const calTbl = document.getElementById('gantt-cal-tbl');
+      if (!calTbl || !gRight) return;
+      const row2Ths = [...calTbl.querySelectorAll('thead tr:last-child th')];
+      if (!row2Ths.length) return;
+      const newW = Math.max(10, Math.floor(gRight.offsetWidth / row2Ths.length));
+      row2Ths.forEach(th => { th.style.width = newW + 'px'; });
+      const row1Ths = [...calTbl.querySelectorAll('thead tr:first-child th')];
+      row1Ths.forEach(th => { const span = parseInt(th.getAttribute('colspan')) || 1; th.style.width = span * newW + 'px'; });
+      calTbl.style.width = newW * row2Ths.length + 'px';
+      // Also sync body cells
+      [...calTbl.querySelectorAll('tbody td.gantt-bar-cell')].forEach((td, i) => {
+        td.style.width = newW + 'px';
+      });
+    };
   }
 
   enhanceGanttTable(wrap);
