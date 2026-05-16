@@ -88,7 +88,7 @@ body.dark .tl-label-sep{stroke:#2a3a5c}
 #gantt-wrap{overflow-x:auto;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .gantt-table{border-collapse:collapse;font-size:11px;min-width:100%}
 .gantt-table th,.gantt-table td{border:1px solid #e8e8e8;padding:0}
-.gantt-table .gt-cell{padding:4px 5px;white-space:nowrap}
+.gantt-table .gt-cell{padding:4px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gantt-table .gt-header{background:#f5f7fa;font-weight:600;font-size:10px;text-align:center;padding:4px 2px}
 .gantt-table .gt-month{background:#e8edf5;font-weight:700;font-size:10px;text-align:center;color:#1a3a5c;padding:4px 2px}
 .gantt-bar-cell{min-width:20px;padding:0;position:relative;height:26px}
@@ -1644,32 +1644,26 @@ window.showNWContextMenu = function(event, id) {
   }, 10);
 };
 
-// NW subgraph — opens in a new browser window
-// Stores data on the PARENT window; popup accesses it via window.opener (safe across document.write)
+// NW subgraph — new browser window approach
+// Data is stored on window so popup can access via window.opener
 window.showNWSubPanel = function(id) {
   if (!id) return;
   const depth = state.nwSubPanelDepth || 2;
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
-
-  // Store on THIS window so popup can read via window.opener (not cleared by child document.open)
   window._nwSubData = { tasks: state.tasks, focusId: id, title: title, depth: depth };
-
   const win = window.open('', 'nw_sub_' + id,
     'width=1080,height=700,resizable=yes,scrollbars=yes,menubar=no,toolbar=no');
-  if (!win) {
-    alert('ポップアップがブロックされています。ブラウザの設定で許可してください。');
-    return;
-  }
-  // No document.open() call — implicit open happens in child context, preserving window.opener
+  if (!win) { alert('ポップアップがブロックされています。ブラウザの設定で許可してください。'); return; }
+  win.document.open();
   win.document.write(buildSubgraphWindowHTML());
   win.document.close();
   win.focus();
 };
 
-window.closeNWSubPanel = function() { /* no-op: new-window approach */ };
+window.closeNWSubPanel = function() { /* new-window approach: no-op */ };
+window.closeNWSubModal = window.closeNWSubPanel;
 
-// d3, task data, focus info are passed via win._d3 / win._nwTasks etc. before document.write
 function buildSubgraphWindowHTML() {
   return '<!DOCTYPE html>\n<html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>\n' +
 '<style>\n' +
@@ -1734,7 +1728,8 @@ function buildSubgraphWindowHTML() {
 '  reg.forEach(function(t){if(!t.pred)return;t.pred.split(",").map(function(s){return parseInt(s.trim());}).forEach(function(p){ae.push({source:p,target:t.id});});});\n' +
 '  for(var i=0;i<dep;i++){var add=new Set();ae.forEach(function(e){if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(function(id){sel.add(id);});}\n' +
 '  var sub=reg.filter(function(t){return sel.has(t.id);});\n' +
-'  var svg=d3.select("#sv").attr("width",cW).attr("height",cH);\n' +
+'  var svEl=document.getElementById("sv");\n' +
+'  var svg=d3.select(svEl).attr("width",cW).attr("height",cH);\n' +
 '  svg.selectAll("*").remove();\n' +
 '  if(!sub.length){\n' +
 '    svg.append("text").attr("x",cW/2).attr("y",cH/2).attr("text-anchor","middle").attr("font-size","14px").attr("fill","#888").text("関連タスクが見つかりません（深さを増やしてください）");\n' +
@@ -1788,10 +1783,12 @@ function buildSubgraphWindowHTML() {
 '}\n' +
 'function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}\n' +
 'window.addEventListener("resize",draw);\n' +
-'window.addEventListener("load",draw);\n' +
+'draw();\n' +
 '})();\n' +
 '<' + '/script></body></html>';
 }
+
+
 
 // =====================================================================
 // SCREEN 4: GANTT CHART
@@ -2023,7 +2020,7 @@ function renderMeeting() {
         const saved = !!c.comment;
         return `<tr>
           <td style="font-size:10px;color:#888;white-space:nowrap">${t.wbs}</td>
-          <td style="min-width:140px">${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+          <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
           <td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>
           <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
           <td style="white-space:nowrap;font-size:11px">${t.end||'—'}</td>
@@ -2158,7 +2155,7 @@ function renderDept() {
 
     return `<tr>
       <td style="font-size:10px;color:#888">${t.wbs}</td>
-      <td style="min-width:130px">${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
+      <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
       <td style="white-space:nowrap;font-size:11px">${t.bstart||'—'}</td>
       <td style="white-space:nowrap;font-size:11px">${t.bend||'—'}</td>
       <td>${pctBar(t.pct)}</td>
@@ -2310,6 +2307,7 @@ function updateThemeBtn() {
 // =====================================================================
 function enhanceTable(tableEl, screenId) {
   if (!tableEl) return;
+  tableEl.style.tableLayout = 'fixed';
   applyColReorder(tableEl, screenId);
   applyColResize(tableEl, screenId);
   applyColFilter(tableEl, screenId);
@@ -2345,24 +2343,28 @@ function _getOrCreateMeasureDiv() {
 
 function measureColContentWidth(th, colIdx, tableEl) {
   const div = _getOrCreateMeasureDiv();
-  div.style.font = window.getComputedStyle(th).font;
+  // Use individual font properties — more reliable than getComputedStyle().font shorthand
+  const cs = window.getComputedStyle(th);
+  div.style.fontSize   = cs.fontSize;
+  div.style.fontWeight = cs.fontWeight;
+  div.style.fontFamily = cs.fontFamily;
+  div.style.letterSpacing = cs.letterSpacing;
 
   // Header: read only direct text nodes (skip resize handle, filter button)
   let headerText = '';
   th.childNodes.forEach(n => { if (n.nodeType === 3) headerText += n.textContent; });
   headerText = headerText.trim();
   div.textContent = headerText;
-  let maxW = div.offsetWidth + 16; // 16px cell padding
+  let maxW = div.offsetWidth + 10; // 10px padding (5px each side)
 
   // Body cells
   tableEl.querySelectorAll('tbody tr').forEach(tr => {
     const td = tr.cells[colIdx];
     if (!td) return;
     const clone = td.cloneNode(true);
-    // Remove pure UI controls; keep content-bearing children
     clone.querySelectorAll('.col-resizer,.resize-handle,.filter-btn,.col-filter-btn').forEach(el => el.remove());
     div.textContent = clone.textContent.trim();
-    maxW = Math.max(maxW, div.offsetWidth + 16);
+    maxW = Math.max(maxW, div.offsetWidth + 10);
   });
   return maxW;
 }
@@ -2371,7 +2373,7 @@ function autoFitCols(ths, tableEl, storageKey) {
   const ws = {};
   ths.forEach((th, i) => {
     const w = measureColContentWidth(th, i, tableEl);
-    th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+    th.style.width = w + 'px'; th.style.minWidth = '0';
     ws[i] = w + 'px';
   });
   localStorage.setItem(storageKey, JSON.stringify(ws));
@@ -2381,7 +2383,7 @@ function fitSingleCol(th, peerThs, tableEl, storageKey) {
   const colIdx = peerThs.indexOf(th);
   if (colIdx === -1) return;
   const w = measureColContentWidth(th, colIdx, tableEl);
-  th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+  th.style.width = w + 'px'; th.style.minWidth = '0';
   const ws = {};
   peerThs.forEach((t, i) => { ws[i] = t.offsetWidth + 'px'; });
   localStorage.setItem(storageKey, JSON.stringify(ws));
@@ -2399,7 +2401,7 @@ function applyColResize(tableEl, screenId) {
   const ths = [...headerRow.cells];
   ths.forEach((th, i) => {
     th.style.position = 'relative';
-    if (hasSaved && saved[i]) { th.style.width = saved[i]; th.style.minWidth = saved[i]; }
+    if (hasSaved && saved[i]) { th.style.width = saved[i]; th.style.minWidth = '0'; }
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
     handle.className = 'col-resizer';
@@ -2409,7 +2411,7 @@ function applyColResize(tableEl, screenId) {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onMove = (ev) => { const w = Math.max(20, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = '0'; };
       const onUp = () => {
         handle.classList.remove('resizing');
         const ws = {}; ths.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
@@ -2624,9 +2626,20 @@ function enhanceGanttTable(wrap) {
   const resizeKey = 'pj_column_widths_gantt';
   const savedW = JSON.parse(localStorage.getItem(resizeKey) || '{}');
   const hasSavedW = Object.keys(savedW).length > 0;
+  const fixedColCount = fixedThs.length;
+  function applyGanttColWidths() {
+    fixedThs.forEach((th, i) => {
+      const w = th.offsetWidth;
+      table.querySelectorAll(`tbody tr`).forEach(tr => {
+        const td = tr.cells[i];
+        if (td) { td.style.maxWidth = w + 'px'; td.style.overflow = 'hidden'; }
+      });
+    });
+  }
+
   fixedThs.forEach((th, i) => {
     th.style.position = 'relative';
-    if (hasSavedW && savedW[i]) { th.style.width = savedW[i]; th.style.minWidth = savedW[i]; }
+    if (hasSavedW && savedW[i]) { th.style.width = savedW[i]; th.style.minWidth = '0'; }
     th.querySelectorAll('.col-resizer').forEach(r => r.remove());
     const handle = document.createElement('div');
     handle.className = 'col-resizer'; handle.setAttribute('draggable', 'false');
@@ -2635,7 +2648,14 @@ function enhanceGanttTable(wrap) {
       e.preventDefault(); e.stopPropagation();
       handle.classList.add('resizing');
       const startX = e.clientX, startW = th.offsetWidth;
-      const onMove = (ev) => { const w = Math.max(30, startW + ev.clientX - startX); th.style.width = w + 'px'; th.style.minWidth = w + 'px'; };
+      const onMove = (ev) => {
+        const w = Math.max(20, startW + ev.clientX - startX);
+        th.style.width = w + 'px'; th.style.minWidth = '0';
+        table.querySelectorAll('tbody tr').forEach(tr => {
+          const td = tr.cells[i];
+          if (td) { td.style.maxWidth = w + 'px'; td.style.overflow = 'hidden'; }
+        });
+      };
       const onUp = () => {
         handle.classList.remove('resizing');
         const ws = {}; fixedThs.forEach((t, idx) => { ws[idx] = t.offsetWidth + 'px'; });
@@ -2648,8 +2668,10 @@ function enhanceGanttTable(wrap) {
     handle.addEventListener('dblclick', (e) => {
       e.preventDefault(); e.stopPropagation();
       fitSingleCol(th, fixedThs, table, resizeKey);
+      applyGanttColWidths();
     });
   });
+  if (hasSavedW) requestAnimationFrame(applyGanttColWidths);
   if (!hasSavedW) {
     requestAnimationFrame(() => {
       const ws = {}; fixedThs.forEach((t, i) => { if (t.offsetWidth > 0) ws[i] = t.offsetWidth + 'px'; });
