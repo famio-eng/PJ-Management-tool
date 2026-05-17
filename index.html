@@ -398,7 +398,8 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
     </div>
     <div style="flex:1;overflow-y:auto;padding:12px 0">
       <div id="settings-tab-visible-cols">
-        <div style="font-size:11px;color:#888;margin-bottom:10px">チェックON＝表示・OFF＝非表示。「適用」で即時反映します。</div>
+        <div style="font-size:12px;font-weight:600;color:#1a3a5c;margin-bottom:4px">全ビュー共通の表示列設定です</div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px">チェックON＝表示・OFF＝非表示。「適用」で即時反映します。各列が使用されるビューをタグで表示しています。</div>
         <div id="visible-cols-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px"></div>
       </div>
       <div id="settings-tab-alias" style="display:none">
@@ -601,28 +602,54 @@ function getDeptColor(resource) {
 
 // All configurable columns (A-1)
 const ALL_COLUMNS = [
-  {key:'id',       label:'ID',               defaultOn:false},
-  {key:'wbs',      label:'WBS番号',           defaultOn:false},
-  {key:'level',    label:'アウトラインレベル', defaultOn:false},
-  {key:'name',     label:'タスク名',           defaultOn:true},
-  {key:'note',     label:'Note',              defaultOn:false},
-  {key:'duration', label:'期間',              defaultOn:false},
-  {key:'start',    label:'開始日',            defaultOn:true},
-  {key:'end',      label:'終了日',            defaultOn:true},
-  {key:'bstart',   label:'基準開始日',        defaultOn:false},
-  {key:'bend',     label:'基準終了日',        defaultOn:false},
-  {key:'astart',   label:'実績開始日',        defaultOn:false},
-  {key:'aend',     label:'実績終了日',        defaultOn:false},
-  {key:'remain',   label:'残存期間',          defaultOn:false},
-  {key:'pred',     label:'先行タスク',        defaultOn:false},
-  {key:'succ',     label:'後続タスク',        defaultOn:false},
-  {key:'resource', label:'リソース名',        defaultOn:true},
-  {key:'pct',      label:'達成率',            defaultOn:true},
-  {key:'status_col',label:'ステータス',       defaultOn:true},
-  {key:'deliverable',label:'成果物',          defaultOn:false},
-  {key:'critical', label:'クリティカル',      defaultOn:false},
-  {key:'active',   label:'アクティブ',        defaultOn:false},
-  {key:'progress', label:'進捗状況',          defaultOn:true},
+  {key:'id',         label:'ID',               defaultOn:false, views:['ガント']},
+  {key:'wbs',        label:'WBS番号',           defaultOn:false, views:['ガント','定例','機能別']},
+  {key:'level',      label:'アウトラインレベル', defaultOn:false, views:['ガント']},
+  {key:'name',       label:'タスク名',           defaultOn:true,  views:['ガント','TL','定例','機能別']},
+  {key:'note',       label:'Note',              defaultOn:false, views:['ガント']},
+  {key:'duration',   label:'期間',              defaultOn:false, views:['ガント']},
+  {key:'start',      label:'開始日',            defaultOn:true,  views:['ガント','機能別']},
+  {key:'end',        label:'終了日',            defaultOn:true,  views:['ガント','定例','機能別']},
+  {key:'bstart',     label:'基準開始日',        defaultOn:false, views:['ガント','TL','機能別']},
+  {key:'bend',       label:'基準終了日',        defaultOn:false, views:['ガント','TL','定例','機能別']},
+  {key:'astart',     label:'実績開始日',        defaultOn:false, views:['ガント']},
+  {key:'aend',       label:'実績終了日',        defaultOn:false, views:['ガント']},
+  {key:'remain',     label:'残存期間',          defaultOn:false, views:['ガント']},
+  {key:'pred',       label:'先行タスク',        defaultOn:false, views:['ガント']},
+  {key:'succ',       label:'後続タスク',        defaultOn:false, views:['ガント']},
+  {key:'resource',   label:'リソース名',        defaultOn:true,  views:['ガント','TL','定例','機能別']},
+  {key:'pct',        label:'達成率',            defaultOn:true,  views:['ガント','TL','定例','機能別']},
+  {key:'status_col', label:'ステータス',        defaultOn:true,  views:['ガント','TL','定例','機能別']},
+  {key:'deliverable',label:'成果物',            defaultOn:false, views:['ガント']},
+  {key:'critical',   label:'クリティカル',      defaultOn:false, views:['ガント']},
+  {key:'active',     label:'アクティブ',        defaultOn:false, views:['ガント']},
+  {key:'progress',   label:'進捗状況',          defaultOn:true,  views:['機能別']},
+];
+
+// Gantt fixed-column full definition (key=gantt internal key, visKey=ALL_COLUMNS key, alwaysOn=not toggleable)
+const GANTT_FIXED_COLS_DEF = [
+  {key:'id',         visKey:'id',          label:'ID',         w:40},
+  {key:'wbs',        visKey:'wbs',         label:'WBS番号',    w:70},
+  {key:'level',      visKey:'level',       label:'Lv',         w:36},
+  {key:'name',       visKey:'name',        label:'タスク名',   w:200, alwaysOn:true},
+  {key:'note',       visKey:'note',        label:'Note',       w:120},
+  {key:'duration',   visKey:'duration',    label:'期間',       w:68},
+  {key:'start',      visKey:'start',       label:'開始日',     w:80},
+  {key:'end',        visKey:'end',         label:'終了日',     w:80},
+  {key:'bstart',     visKey:'bstart',      label:'基準開始',   w:80},
+  {key:'bend',       visKey:'bend',        label:'基準終了',   w:80},
+  {key:'astart',     visKey:'astart',      label:'実績開始',   w:80},
+  {key:'aend',       visKey:'aend',        label:'実績終了',   w:80},
+  {key:'remain',     visKey:'remain',      label:'残存',       w:68},
+  {key:'pred',       visKey:'pred',        label:'先行',       w:60},
+  {key:'succ',       visKey:'succ',        label:'後続',       w:60},
+  {key:'resource',   visKey:'resource',    label:'担当部門',   w:80},
+  {key:'pct',        visKey:'pct',         label:'達成率',     w:65},
+  {key:'status',     visKey:'status_col',  label:'ステータス', w:70},
+  {key:'deliverable',visKey:'deliverable', label:'成果物',     w:80},
+  {key:'critical',   visKey:'critical',    label:'CP',         w:36},
+  {key:'active',     visKey:'active',      label:'有効',       w:36},
+  {key:'nw',         visKey:null,          label:'NW',         w:32, alwaysOn:true},
 ];
 
 function isColVisible(key) {
@@ -1869,19 +1896,35 @@ window.switchSettingsTab = function(tab, btn) {
   document.getElementById('settings-tab-alias').style.display = tab==='alias' ? '' : 'none';
 };
 
+const VIEW_TAG_COLORS = {
+  'ガント': '#4472C4', 'TL': '#00897B', '定例': '#E65100', '機能別': '#6A1B9A'
+};
+
 function initVisibleColsUI() {
   const list = document.getElementById('visible-cols-list');
   if (!list) return;
   list.innerHTML = '';
   ALL_COLUMNS.forEach(col => {
     const lbl = document.createElement('label');
-    lbl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px';
+    lbl.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;font-size:12px;flex-wrap:wrap';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = isColVisible(col.key);
     cb.dataset.colKey = col.key;
     lbl.appendChild(cb);
-    lbl.appendChild(document.createTextNode(col.label));
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = col.label;
+    lbl.appendChild(nameSpan);
+    const tagWrap = document.createElement('span');
+    tagWrap.style.cssText = 'display:flex;gap:2px;flex-wrap:wrap;margin-left:auto';
+    (col.views || []).forEach(v => {
+      const tag = document.createElement('span');
+      const c = VIEW_TAG_COLORS[v] || '#888';
+      tag.style.cssText = `font-size:9px;padding:1px 4px;border-radius:3px;background:${c}20;color:${c};border:1px solid ${c}50;white-space:nowrap`;
+      tag.textContent = v;
+      tagWrap.appendChild(tag);
+    });
+    lbl.appendChild(tagWrap);
     list.appendChild(lbl);
   });
 }
@@ -2680,11 +2723,8 @@ function drawGantt() {
   });
   if (curG) groups.push(curG);
 
-  let fixedCols = [
-    {key:'id',label:'ID',w:40},{key:'wbs',label:'WBS番号',w:70},{key:'name',label:'タスク名',w:200},
-    {key:'resource',label:'担当部門',w:80},{key:'pct',label:'達成率',w:65},
-    {key:'status',label:'ステータス',w:70},{key:'nw',label:'NW図',w:32}
-  ];
+  // Build visible fixed columns from full definition, filtering by isColVisible()
+  let fixedCols = GANTT_FIXED_COLS_DEF.filter(c => c.alwaysOn || isColVisible(c.visKey));
 
   const visibleTasks = [];
   const hiddenParents = new Set();
@@ -2696,10 +2736,12 @@ function drawGantt() {
     }
   });
 
+  // Restore saved column order (partial match: ordered first, then remaining visible cols)
   const savedOrder = JSON.parse(localStorage.getItem('pj_column_order_gantt') || 'null');
-  if (savedOrder && savedOrder.length === fixedCols.length) {
+  if (savedOrder) {
     const ordered = savedOrder.map(k => fixedCols.find(c => c.key === k)).filter(Boolean);
-    if (ordered.length === fixedCols.length) fixedCols = ordered;
+    const remaining = fixedCols.filter(c => !savedOrder.includes(c.key));
+    if (ordered.length > 0) fixedCols = [...ordered, ...remaining];
   }
 
   // ── LEFT TABLE: fixed columns ──
@@ -2719,15 +2761,30 @@ function drawGantt() {
       let val = '';
       if (c.key === 'id') val = `<span style="font-size:10px;color:#aaa">${task.id}</span>`;
       else if (c.key === 'wbs') val = `<span style="font-size:10px;color:#888">${task.wbs}</span>`;
+      else if (c.key === 'level') val = `<span style="font-size:10px;color:#aaa">${task.level||''}</span>`;
       else if (c.key === 'name') {
         const tog = isSummary
           ? `<span style="cursor:pointer;margin-right:4px;color:#4472C4" onclick="toggleGanttRow(${task.id})">${isCollapsed?'▶':'▼'}</span>`
           : '<span style="display:inline-block;width:18px"></span>';
         val = `<div class="${indent}">${tog}${task.name}</div>`;
       }
+      else if (c.key === 'note') val = `<span style="font-size:10px;color:#666">${task.note||''}</span>`;
+      else if (c.key === 'duration') val = `<span style="font-size:10px">${task.duration||''}</span>`;
+      else if (c.key === 'start') val = `<span style="font-size:10px">${formatDate(task.start)}</span>`;
+      else if (c.key === 'end') val = `<span style="font-size:10px">${formatDate(task.end)}</span>`;
+      else if (c.key === 'bstart') val = `<span style="font-size:10px">${formatDate(task.bstart)}</span>`;
+      else if (c.key === 'bend') val = `<span style="font-size:10px">${formatDate(task.bend)}</span>`;
+      else if (c.key === 'astart') val = `<span style="font-size:10px">${formatDate(task.astart)}</span>`;
+      else if (c.key === 'aend') val = `<span style="font-size:10px">${formatDate(task.aend)}</span>`;
+      else if (c.key === 'remain') val = `<span style="font-size:10px">${task.remain||''}</span>`;
+      else if (c.key === 'pred') val = `<span style="font-size:10px;color:#888">${task.pred||''}</span>`;
+      else if (c.key === 'succ') val = `<span style="font-size:10px;color:#888">${task.succ||''}</span>`;
       else if (c.key === 'resource') val = `<span style="font-size:10px;color:#888">${task.resource||''}</span>`;
       else if (c.key === 'pct') val = pctBar(task.pct);
       else if (c.key === 'status') val = statusBadge(task.status);
+      else if (c.key === 'deliverable') val = `<span style="font-size:10px">${task.deliverable||''}</span>`;
+      else if (c.key === 'critical') val = task.critical==='はい' ? '<span class="cp-badge">CP</span>' : '';
+      else if (c.key === 'active') val = `<span style="font-size:10px">${task.active||''}</span>`;
       else if (c.key === 'nw') val = `<span class="nw-icon" onclick="showNWSubPanel(${task.id})" title="サブグラフ">🔗</span>`;
       L += `<td class="gft-cell">${val}</td>`;
     });
@@ -2907,8 +2964,21 @@ function renderMeeting() {
 
   function sectionTable(sectionTasks, sectionId) {
     if (sectionTasks.length === 0) return '<p class="text-muted" style="padding:8px 0">該当タスクなし</p>';
+    const showResource  = isColVisible('resource');
+    const showBend      = isColVisible('bend');
+    const showEnd       = isColVisible('end');
+    const showPct       = isColVisible('pct');
+    const showStatus    = isColVisible('status_col');
     return `<table>
-      <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>予測終了日</th><th>達成率</th><th>ステータス</th><th>進捗コメント</th></tr></thead>
+      <thead><tr>
+        <th>WBS</th><th>タスク名</th>
+        ${showResource  ? '<th>担当</th>'    : ''}
+        ${showBend      ? '<th>基準終了日</th>' : ''}
+        ${showEnd       ? '<th>予測終了日</th>' : ''}
+        ${showPct       ? '<th>達成率</th>'  : ''}
+        ${showStatus    ? '<th>ステータス</th>' : ''}
+        <th>進捗コメント</th>
+      </tr></thead>
       <tbody>${sectionTasks.map(t => {
         const ck = `meeting_${t.id}_${weekKey}`;
         const c = state.comments[ck] || {};
@@ -2916,11 +2986,11 @@ function renderMeeting() {
         return `<tr>
           <td style="font-size:10px;color:#888;white-space:nowrap">${t.wbs}</td>
           <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
-          <td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>
-          <td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>
-          <td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>
-          <td>${pctBar(t.pct)}</td>
-          <td>${statusBadge(t.status)}</td>
+          ${showResource  ? `<td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>` : ''}
+          ${showBend      ? `<td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>` : ''}
+          ${showEnd       ? `<td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>` : ''}
+          ${showPct       ? `<td>${pctBar(t.pct)}</td>` : ''}
+          ${showStatus    ? `<td>${statusBadge(t.status)}</td>` : ''}
           <td>
             <textarea class="comment-input${saved?' saved':''}" id="mc_${t.id}"
               onchange="saveMeetingComment(${t.id},'${weekKey}',this.value)"
@@ -3036,6 +3106,14 @@ function renderDept() {
     `<div class="dept-tab${d === dept ? ' active' : ''}" onclick="setDeptTab('${d}')">${d}</div>`
   ).join('');
 
+  const showDeptResource = isAll && isColVisible('resource');
+  const showDeptBstart   = isColVisible('bstart');
+  const showDeptBend     = isColVisible('bend');
+  const showDeptPct      = isColVisible('pct');
+  const showDeptStart    = isColVisible('start');
+  const showDeptEnd      = isColVisible('end');
+  const showDeptStatus   = isColVisible('status_col');
+
   const rows = tasks.map(t => {
     const ck = `dept_${t.id}_${weekKey}`;
     const c = state.comments[ck] || {};
@@ -3049,17 +3127,16 @@ function renderDept() {
       </td>`;
     }).join('');
 
-    const resourceCol = isAll ? `<td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>` : '';
     return `<tr>
       <td style="font-size:10px;color:#888">${t.wbs}</td>
       <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
-      ${resourceCol}
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.bstart)}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>
-      <td>${pctBar(t.pct)}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.start)}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>
-      <td>${statusBadge(t.status)}</td>
+      ${showDeptResource ? `<td style="white-space:nowrap;font-size:11px">${t.resource||''}</td>` : ''}
+      ${showDeptBstart   ? `<td style="white-space:nowrap;font-size:11px">${formatDate(t.bstart)}</td>` : ''}
+      ${showDeptBend     ? `<td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>` : ''}
+      ${showDeptPct      ? `<td>${pctBar(t.pct)}</td>` : ''}
+      ${showDeptStart    ? `<td style="white-space:nowrap;font-size:11px">${formatDate(t.start)}</td>` : ''}
+      ${showDeptEnd      ? `<td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>` : ''}
+      ${showDeptStatus   ? `<td>${statusBadge(t.status)}</td>` : ''}
       <td>
         <textarea class="comment-input${saved?' saved':''}" id="dc_${t.id}"
           placeholder="進捗コメントを入力..." style="width:100%;min-height:38px">${c.comment||''}</textarea>
@@ -3084,8 +3161,14 @@ function renderDept() {
         <table>
           <thead>
             <tr>
-              <th>WBS</th><th>タスク名</th>${isAll?'<th>担当部門</th>':''}<th>基準開始</th><th>基準終了</th>
-              <th>達成率</th><th>予測開始</th><th>予測終了</th><th>ステータス</th>
+              <th>WBS</th><th>タスク名</th>
+              ${showDeptResource ? '<th>担当部門</th>' : ''}
+              ${showDeptBstart   ? '<th>基準開始</th>' : ''}
+              ${showDeptBend     ? '<th>基準終了</th>' : ''}
+              ${showDeptPct      ? '<th>達成率</th>'   : ''}
+              ${showDeptStart    ? '<th>予測開始</th>' : ''}
+              ${showDeptEnd      ? '<th>予測終了</th>' : ''}
+              ${showDeptStatus   ? '<th>ステータス</th>' : ''}
               <th>進捗コメント</th><th>担当者名</th>
               ${pastWeeks.map(wk => `<th style="background:#f0f0f0;font-size:10px">${wk}<br>（過去）</th>`).join('')}
             </tr>
