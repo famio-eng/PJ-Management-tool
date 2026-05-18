@@ -115,7 +115,9 @@ body.dark #gantt-divider:hover,body.dark #gantt-divider.resizing{background:#447
 .gantt-bar-cell{width:22px;padding:0;position:relative;height:26px;box-sizing:border-box}
 .gantt-bar-base{position:absolute;height:14px;top:6px;border-radius:2px;background:#4472C4;opacity:.6}
 .gantt-bar-actual{position:absolute;height:14px;top:6px;border-radius:2px;background:#00B050;opacity:.85}
-.today-col{background:#FFF3E0 !important}
+.today-col{background:#FFF3E0 !important;border-left:2px solid #E53935 !important}
+.today-col.gt-header::before{content:"TODAY";display:block;color:#E53935;font-size:8px;font-weight:700;line-height:1.2}
+body.dark .today-col{background:#3d2010 !important;border-left-color:#ef5350 !important}
 .cp-row td:first-child{border-left:3px solid #e53935}
 .gantt-controls{display:flex;gap:8px;padding:10px;border-bottom:1px solid #eee;align-items:center}
 .collapsed-children{display:none}
@@ -220,6 +222,15 @@ body.dark .mtg-upcoming-start{background:#3d2e00;color:#ffcc80}
 body.dark .mtg-upcoming-end{background:#1b3320;color:#a5d6a7}
 body.dark .mtg-cp{background:#3d1515;color:#ef9a9a}
 body.dark .sidebar-footer .btn-outline{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.8)}
+/* Settings tab */
+.settings-tab{background:none;border:none;border-bottom:2px solid transparent;padding:6px 14px;cursor:pointer;font-size:12px;color:#666;margin-bottom:-2px}
+.settings-tab.active{border-bottom-color:#1a3a5c;color:#1a3a5c;font-weight:600}
+.settings-tab:hover:not(.active){color:#333}
+body.dark .settings-tab{color:#aaa}
+body.dark .settings-tab.active{border-bottom-color:#90b8e0;color:#90b8e0}
+/* Toast */
+.toast{background:#1a3a5c;color:#fff;padding:9px 16px;border-radius:6px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.25);animation:toast-in .2s ease;pointer-events:none;max-width:320px}
+@keyframes toast-in{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
 /* Night mode toggle */
 #night-toggle{background:none;border:1px solid #ccc;border-radius:20px;padding:3px 8px;cursor:pointer;font-size:15px;transition:all .2s;line-height:1}
 #night-toggle:hover{background:rgba(0,0,0,.08)}
@@ -309,6 +320,8 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
       <label>次回定例予定日: <input type="date" id="input-report-date" style="border:1px solid #ccc;border-radius:4px;padding:3px 7px;font-size:12px"></label>
       <button class="btn btn-primary btn-sm" onclick="saveSettings()">保存</button>
       <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 印刷</button>
+      <button class="btn btn-outline btn-sm" onclick="exportDataJson()" title="現在のプロジェクトデータをdata.jsonとしてダウンロード">📤 JSON出力</button>
+      <button class="btn btn-outline btn-sm" onclick="openSettingsModal()" title="表示列・エイリアス設定">⚙ 設定</button>
       <button id="night-toggle" onclick="toggleTheme()" title="ダーク/ライトモード切替">🌙</button>
       <!-- Phase2 M365ログインUI: Azure AD連携断念中のため非表示 -->
       <div id="auth-area" style="display:none">
@@ -319,6 +332,49 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
   </div>
   <div id="content"></div>
 </div>
+
+<!-- ===== SETTINGS MODAL ===== -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal" style="width:560px;max-height:85vh;display:flex;flex-direction:column">
+    <h3>⚙ 設定</h3>
+    <div style="display:flex;gap:0;border-bottom:2px solid #e0e0e0;margin-bottom:14px">
+      <button class="settings-tab active" data-tab="columns" onclick="switchSettingsTab('columns')">表示列</button>
+      <button class="settings-tab" data-tab="alias" onclick="switchSettingsTab('alias')">エイリアス</button>
+    </div>
+    <div id="settings-tab-columns" style="overflow-y:auto;flex:1">
+      <p style="font-size:11px;color:#888;margin-bottom:10px">この設定はご自身のブラウザにのみ保存されます</p>
+      <div id="col-checkbox-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px"></div>
+    </div>
+    <div id="settings-tab-alias" style="display:none;overflow-y:auto;flex:1">
+      <p style="font-size:11px;color:#888;margin-bottom:10px">Excelの値（リソース名）を表示名に変換します</p>
+      <datalist id="alias-resource-list"></datalist>
+      <table style="width:100%;font-size:12px;border-collapse:collapse" id="alias-table">
+        <thead><tr><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e0e0e0">Excelの値</th><th style="padding:4px 6px;text-align:left;border-bottom:1px solid #e0e0e0">表示名（エイリアス）</th><th style="width:32px"></th></tr></thead>
+        <tbody id="alias-tbody"></tbody>
+      </table>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addAliasRow()">＋ 追加</button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('settings-modal')">キャンセル</button>
+      <button class="btn btn-primary" onclick="applySettings()">適用</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROJECT SELECTION MODAL ===== -->
+<div class="modal-overlay" id="project-select-modal">
+  <div class="modal" style="width:480px;max-height:85vh;display:flex;flex-direction:column">
+    <h3>📊 プロジェクトを選択</h3>
+    <p style="font-size:11px;color:#888;margin-bottom:12px">読み込まれたプロジェクトを選択してください</p>
+    <div id="project-list" style="overflow-y:auto;max-height:340px;flex:1;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn btn-outline" onclick="document.getElementById('excel-file-input').click();closeModal('project-select-modal')">📂 Excelから新規追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div id="toast-container" style="position:fixed;top:60px;right:20px;z-index:9998;display:flex;flex-direction:column;gap:8px;pointer-events:none"></div>
 
 <!-- ===== MODALS ===== -->
 <div class="modal-overlay" id="action-modal">
@@ -524,6 +580,9 @@ const state = {
   reportDate: '2026-05-18',
   currentScreen: 'dashboard',
   nwMode: 'all',
+  nwLayoutMode: 'dependency',
+  nwPxPerDay: 3,
+  nwTimeRange: 'all',
   nwSelectedId: null,
   nwSubDepth: 2,
   nwDeptFilter: 'all',
@@ -738,6 +797,12 @@ function loadStorage() {
     state.timelineItems = JSON.parse(localStorage.getItem('pj_timeline_items') || '[]');
     const _sel = JSON.parse(localStorage.getItem('pj_tl_selected') || 'null');
     if (_sel) state.tlSelectedIds = new Set(_sel);
+    // B-5: restore gantt collapsed state
+    const _gc = JSON.parse(localStorage.getItem('pj_gantt_collapsed') || 'null');
+    if (_gc) state.collapsedRows = new Set(_gc);
+    // B-1: restore NW layout mode
+    const _nm = localStorage.getItem('pj_nw_mode');
+    if (_nm) state.nwLayoutMode = _nm;
   } catch(e) { console.warn('Storage load failed', e); }
 }
 
@@ -1176,6 +1241,8 @@ function renderDashboard() {
   </div>`;
 
   document.getElementById('content').innerHTML = html;
+  // A-5, A-6: column reorder + sort on dashboard tables
+  requestAnimationFrame(() => enhanceDashboard());
 }
 
 // =====================================================================
@@ -1414,6 +1481,11 @@ function renderTimeline() {
 
   drawTimeline();
   scrollTLToday();
+  // A-9: wheel scroll sync + height
+  requestAnimationFrame(() => {
+    initTimelineResizeObserver();
+    initTimelineWheelSync();
+  });
 }
 
 window.setTLZoom = function(z) {
@@ -1706,6 +1778,15 @@ function computeLayout(nodes, edges) {
 }
 
 function renderNW() {
+  // B-1: Restore nw layout mode from storage
+  const savedNWMode = localStorage.getItem('pj_nw_mode');
+  if (savedNWMode) state.nwLayoutMode = savedNWMode;
+
+  if (state.nwLayoutMode === 'timeline') {
+    renderTimelineNW();
+    return;
+  }
+
   const tasks = state.tasks;
   const regularTasks = tasks.filter(t => !t.isSummary && t.active !== 'いいえ');
 
@@ -1755,10 +1836,21 @@ function renderNW() {
 
   document.getElementById('content').innerHTML = `
     <div class="nw-controls" style="margin-bottom:10px">
+      <span style="font-size:11px;color:#666;font-weight:600">NWモード:</span>
+      <button class="btn btn-sm ${state.nwLayoutMode!=='timeline'?'btn-secondary':'btn-outline'}" onclick="setNWLayoutMode('dependency')">🔗 依存関係モード</button>
+      <button class="btn btn-sm ${state.nwLayoutMode==='timeline'?'btn-secondary':'btn-outline'}" onclick="setNWLayoutMode('timeline')">📅 タイムラインNWモード</button>
+      <span style="width:8px"></span>
       <button class="btn btn-sm ${state.nwMode==='cp'?'btn-primary':'btn-outline'}" onclick="setNWMode('cp')">CPモード</button>
       <button class="btn btn-sm ${state.nwMode==='all'?'btn-primary':'btn-outline'}" onclick="setNWMode('all')">全体モード</button>
       <button class="btn btn-sm ${state.nwMode==='sub'?'btn-primary':'btn-outline'}" onclick="setNWMode('sub')">サブグラフ</button>
       ${state.nwMode==='sub'?`<label style="font-size:11px">深さ: <input type="number" min="1" max="5" value="${state.nwSubDepth}" style="width:44px;border:1px solid #ccc;border-radius:4px;padding:2px 4px" onchange="state.nwSubDepth=+this.value;renderNW()"></label>`:''}
+      ${state.nwLayoutMode==='timeline'?`<label style="font-size:11px;margin-left:4px">1日px: <input type="range" min="1" max="10" value="${state.nwPxPerDay||3}" style="width:70px;vertical-align:middle" oninput="state.nwPxPerDay=+this.value;renderNW()"> ${state.nwPxPerDay||3}</label>
+      <select style="border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-size:11px" onchange="state.nwTimeRange=this.value;renderNW()">
+        <option value="all" ${(state.nwTimeRange||'all')==='all'?'selected':''}>全期間</option>
+        <option value="3m" ${state.nwTimeRange==='3m'?'selected':''}>今後3ヶ月</option>
+        <option value="6m" ${state.nwTimeRange==='6m'?'selected':''}>今後6ヶ月</option>
+        <option value="1y" ${state.nwTimeRange==='1y'?'selected':''}>今後1年</option>
+      </select>`:``}
       <select style="border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-size:11px" onchange="state.nwDeptFilter=this.value;renderNW()">${deptOptions}</select>
       <button class="btn btn-sm btn-outline" onclick="resetNWZoom()">ズームリセット</button>
       <span class="text-muted">${nodes.length}ノード表示中</span>
@@ -1901,11 +1993,197 @@ function renderNW() {
 }
 
 window.setNWMode = function(mode) { state.nwMode = mode; renderNW(); };
+window.setNWLayoutMode = function(mode) {
+  state.nwLayoutMode = mode;
+  localStorage.setItem('pj_nw_mode', mode);
+  renderNW();
+};
 window.resetNWZoom = function() {
   if (state._nwSvg && state._nwZoom) {
     state._nwSvg.transition().duration(400).call(state._nwZoom.transform, d3.zoomIdentity.translate(20, 20));
   }
 };
+
+// B-1: Timeline NW Mode
+function renderTimelineNW() {
+  const tasks = state.tasks;
+  const regularTasks = tasks.filter(t => !t.isSummary && t.active !== 'いいえ' && toDate(t.bstart));
+
+  // Dept filter
+  let modeTasks = regularTasks.slice();
+  if (state.nwDeptFilter && state.nwDeptFilter !== 'all') {
+    modeTasks = modeTasks.filter(t => (t.resource || '').includes(state.nwDeptFilter));
+  }
+  // CP filter
+  if (state.nwMode === 'cp') modeTasks = modeTasks.filter(t => t.critical === 'はい');
+
+  // Time range filter
+  const rd = toDate(state.reportDate) || new Date();
+  if (state.nwTimeRange && state.nwTimeRange !== 'all') {
+    const months = state.nwTimeRange === '3m' ? 3 : state.nwTimeRange === '6m' ? 6 : 12;
+    const cutoff = new Date(rd.getTime() + months * 30.5 * 86400000);
+    modeTasks = modeTasks.filter(t => {
+      const bs = toDate(t.bstart);
+      return bs && bs <= cutoff;
+    });
+  }
+
+  const pxPerDay = state.nwPxPerDay || 3;
+  const NW_MIN = 120, NH = 80, RGAP = 14;
+
+  // Date range
+  let minD = null, maxD = null;
+  modeTasks.forEach(t => {
+    const s = toDate(t.bstart), e = toDate(t.bend);
+    if (s && (!minD || s < minD)) minD = s;
+    if (e && (!maxD || e > maxD)) maxD = e;
+  });
+  if (!minD) minD = new Date(rd.getFullYear(), rd.getMonth() - 1, 1);
+  if (!maxD) maxD = new Date(rd.getFullYear(), rd.getMonth() + 6, 1);
+  const originX = 60;
+  const marginT = 50;
+
+  // Layout: group by outline level, then place by bstart X and level Y
+  const levelMap = {};
+  modeTasks.forEach(t => {
+    const lv = t.level || 1;
+    if (!levelMap[lv]) levelMap[lv] = [];
+    levelMap[lv].push(t);
+  });
+  const levels = Object.keys(levelMap).map(Number).sort((a,b) => a-b);
+
+  const nodeData = [];
+  levels.forEach((lv, li) => {
+    const rowBase = li * (NH + RGAP + 20) + marginT;
+    // sort by bstart
+    const sorted = levelMap[lv].slice().sort((a,b) => {
+      const as = toDate(a.bstart), bs2 = toDate(b.bstart);
+      return (as||new Date(0)) - (bs2||new Date(0));
+    });
+    // Simple collision: track max X used per row band
+    const rowSlots = [rowBase];
+    const lastEndX = [0]; // last used end X per slot
+    sorted.forEach(t => {
+      const bs = toDate(t.bstart), be = toDate(t.bend);
+      if (!bs) return;
+      const dur = be ? Math.max(1, Math.round((be - bs) / 86400000)) : 30;
+      const nw = Math.max(NW_MIN, dur * pxPerDay);
+      const x = originX + Math.round((bs - minD) / 86400000) * pxPerDay;
+      // Find a slot that doesn't overlap
+      let slot = 0;
+      for (let s2 = 0; s2 < rowSlots.length; s2++) {
+        if (lastEndX[s2] <= x + 2) { slot = s2; break; }
+        if (s2 === rowSlots.length - 1) { rowSlots.push(rowBase + (s2+1) * (NH + RGAP)); lastEndX.push(0); slot = s2 + 1; }
+      }
+      nodeData.push({ task: t, x, y: rowSlots[slot], nw, dur, bs, be: be || rd });
+      lastEndX[slot] = x + nw + 4;
+    });
+  });
+
+  const canvasW = nodeData.length ? Math.max(...nodeData.map(n => n.x + n.nw)) + 80 : 800;
+  const canvasH = nodeData.length ? Math.max(...nodeData.map(n => n.y)) + NH + 60 : 400;
+
+  const svgEl = document.getElementById('nw-svg');
+  const containerEl = document.getElementById('nw-svg-container');
+  if (!svgEl || !containerEl) return;
+  const cW = containerEl.clientWidth, cH = containerEl.clientHeight;
+  const svg = d3.select('#nw-svg').attr('width', cW).attr('height', cH);
+  svg.selectAll('*').remove();
+
+  const defs = svg.append('defs');
+  ['normal','cp'].forEach(type => {
+    defs.append('marker').attr('id', `arrow-tl-${type}`)
+      .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
+      .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', type === 'cp' ? '#e53935' : '#4472C4');
+  });
+
+  const g = svg.append('g').attr('id', 'nw-g');
+
+  // Month gridlines + header
+  const headerRect = svg.append('rect').attr('x',0).attr('y',0).attr('width',cW).attr('height',marginT).attr('fill','#f5f7fa');
+  d3.timeMonths(new Date(minD.getFullYear(), minD.getMonth(), 1), new Date(maxD.getFullYear(), maxD.getMonth() + 2, 1)).forEach(m => {
+    const x = originX + Math.round((m - minD) / 86400000) * pxPerDay;
+    g.append('line').attr('x1', x).attr('x2', x).attr('y1', -marginT).attr('y2', canvasH)
+      .attr('stroke', '#dde4f0').attr('stroke-width', 1).attr('opacity', .5);
+    g.append('text').attr('x', x + 4).attr('y', -marginT + 16)
+      .attr('font-size', '10px').attr('fill', '#666').attr('font-family', 'Segoe UI,sans-serif')
+      .text(d3.timeFormat('%Y/%m')(m));
+  });
+
+  // TODAY line
+  const todayX = originX + Math.round((rd - minD) / 86400000) * pxPerDay;
+  g.append('line').attr('x1', todayX).attr('x2', todayX).attr('y1', -marginT).attr('y2', canvasH)
+    .attr('stroke', '#e53935').attr('stroke-width', 2).attr('stroke-dasharray', '4,3').attr('opacity', .7);
+  g.append('text').attr('x', todayX + 3).attr('y', -marginT + 30).attr('font-size', '10px').attr('fill', '#e53935').text('TODAY');
+
+  // Dependency edges
+  const ndMap = {};
+  nodeData.forEach(n => ndMap[n.task.id] = n);
+  nodeData.forEach(nd => {
+    const t = nd.task;
+    if (!t.pred) return;
+    t.pred.split(',').map(s => parseInt(s.trim())).filter(pid => ndMap[pid]).forEach(pid => {
+      const src = ndMap[pid];
+      const isCP = src.task.critical === 'はい' && t.critical === 'はい';
+      const sx = src.x + src.nw, sy = src.y + NH / 2;
+      const tx2 = nd.x, ty2 = nd.y + NH / 2;
+      g.append('path').attr('d', `M${sx},${sy} C${(sx+tx2)/2},${sy} ${(sx+tx2)/2},${ty2} ${tx2},${ty2}`)
+        .attr('fill','none').attr('stroke', isCP ? '#e53935' : '#90b0d8')
+        .attr('stroke-width', isCP ? 2 : 1).attr('marker-end', `url(#arrow-tl-${isCP ? 'cp' : 'normal'})`).attr('opacity', .7);
+    });
+  });
+
+  // Nodes
+  nodeData.forEach(nd => {
+    const t = nd.task;
+    const isClose = t.status === 'Close';
+    const bg = isClose ? '#e0e0e0' : (({'On-going':'#E2EFDA','Delay':'#FFE0E0','nActive':'#F2F2F2'}[t.status])||'#fff');
+    const bd = isClose ? '#aaa' : (({'On-going':'#00B050','Delay':'#FF0000','nActive':'#808080'}[t.status])||'#ccc');
+    const isCP = !isClose && t.critical === 'はい';
+    const ng = g.append('g').attr('transform', `translate(${nd.x},${nd.y})`).style('cursor','pointer')
+      .on('click', () => selectNWNode(t.id))
+      .on('dblclick', (e) => { e.stopPropagation(); showNWSubPanel(t.id); })
+      .on('contextmenu', (e) => { e.preventDefault(); showNWContextMenu(e, t.id); });
+
+    ng.append('rect').attr('width', nd.nw).attr('height', NH).attr('rx', 4).attr('fill', bg)
+      .attr('stroke', isCP ? '#e53935' : bd).attr('stroke-width', isCP ? 2 : 1);
+
+    // Top section: text
+    const nameShort = t.name.length > Math.floor(nd.nw / 7) ? t.name.slice(0, Math.floor(nd.nw / 7)) + '…' : t.name;
+    ng.append('text').attr('x', 6).attr('y', 14).attr('font-size', '10px').attr('font-weight', '600')
+      .attr('fill', '#333').attr('font-family', 'Segoe UI,sans-serif').text(nameShort);
+    ng.append('text').attr('x', 6).attr('y', 26).attr('font-size', '9px').attr('fill', '#777').attr('font-family', 'Segoe UI,sans-serif')
+      .text(`担当:${(t.resource||'').slice(0,12)} ${t.status} ${t.pct}%`);
+
+    // Bottom: plan bar
+    const barY = 36, barH = 12;
+    ng.append('rect').attr('x', 0).attr('y', barY).attr('width', nd.nw).attr('height', barH)
+      .attr('fill', getDeptColor(t.resource)).attr('opacity', .65).attr('rx', 2);
+    // Actual bar
+    if (toDate(t.astart)) {
+      const aEnd = toDate(t.aend) || rd;
+      const dur2 = Math.max(1, Math.round((aEnd - toDate(t.astart)) / 86400000));
+      const aW = Math.min(nd.nw, dur2 * pxPerDay);
+      ng.append('rect').attr('x', 0).attr('y', barY + 2).attr('width', aW).attr('height', barH - 4)
+        .attr('fill', '#A0A0A0').attr('opacity', .85).attr('rx', 2);
+    }
+
+    ng.on('mouseover', (e) => showTooltip(e, `<b>${t.name}</b><br>担当: ${t.resource||'—'}<br>${t.status} | ${t.pct}%`))
+      .on('mouseout', hideTooltip);
+  });
+
+  // Zoom/pan
+  const zoom = d3.zoom().scaleExtent([0.1, 4])
+    .on('zoom', (event) => {
+      g.attr('transform', event.transform);
+      headerRect.attr('transform', `translate(0,${-event.transform.y})`);
+    });
+  svg.call(zoom);
+  svg.call(zoom.transform, d3.zoomIdentity.translate(0, marginT));
+  state._nwZoom = zoom;
+  state._nwSvg = svg;
+}
 
 function selectNWNode(id) {
   state.nwSelectedId = id;
@@ -2261,6 +2539,9 @@ function renderGantt() {
         <span style="width:8px"></span>
         <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="タスク情報列の幅をコンテンツに合わせて最適化">情報列幅調整</button>
         <button class="btn btn-sm btn-outline gantt-cal-fit-btn" title="プロジェクト全期間がカレンダー表示領域に収まるよう列幅を調整">全期間表示</button>
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="gantt-show-root" ${getRootTaskVisible() ? 'checked' : ''} onchange="toggleRootTaskVisible(this.checked)">プロジェクトサマリー行
+        </label>
         <span style="flex:1"></span>
         <span style="font-size:11px;color:#888">
           <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
@@ -2370,12 +2651,15 @@ function drawGantt() {
     {key:'status',label:'ステータス',w:70},{key:'nw',label:'NW図',w:32}
   ];
 
+  const showRoot = getRootTaskVisible();
   const visibleTasks = [];
   const hiddenParents = new Set();
   state.tasks.forEach(t => {
+    if (!showRoot && t.id === 1) return; // B-6: hide root task by default
     const isHidden = t.wbs ? [...hiddenParents].some(hw => t.wbs.startsWith(hw + '.')) : false;
     if (!isHidden) {
       visibleTasks.push(t);
+      // B-5: multi-level collapse — any collapsed summary hides all descendants
       if (t.isSummary && state.collapsedRows.has(t.id)) hiddenParents.add(t.wbs);
     }
   });
@@ -2666,6 +2950,8 @@ function renderMeeting() {
   document.querySelectorAll('#content table').forEach((tbl, i) => {
     if (tbl.querySelector('tbody')) enhanceTable(tbl, 'meeting_' + i);
   });
+  // B-7: textarea auto-resize
+  requestAnimationFrame(() => initTextareaAutoResize(document.getElementById('content')));
 }
 
 window.saveMeetingComment = function(taskId, weekKey, comment) {
@@ -2777,6 +3063,8 @@ function renderDept() {
     </div>`;
   const deptTbl = document.querySelector('#content table');
   if (deptTbl && deptTbl.querySelector('tbody')) enhanceTable(deptTbl, 'dept');
+  // B-8: textarea auto-resize + toast on saveDeptComment
+  requestAnimationFrame(() => initTextareaAutoResize(document.getElementById('content')));
 }
 
 window.setDeptTab = function(dept) { state.deptTab = dept; renderDept(); };
@@ -2796,9 +3084,11 @@ window.saveDeptComment = function(taskId, weekKey, dept) {
   saveStorage();
   const el = document.getElementById(`dc_${taskId}`);
   if (el) el.classList.toggle('saved', !!comment);
-  // Flash feedback
+  // Flash feedback + toast
   const btn = el?.closest('td')?.querySelector('button');
   if (btn) { const orig = btn.textContent; btn.textContent = '✓ 送信済み'; setTimeout(() => btn.textContent = orig, 1500); }
+  const task = state.tasks.find(t => t.id === taskId);
+  showToast(`✅ コメントを保存しました（${task ? task.name : taskId}・担当: ${author || '—'}）`);
 };
 
 // =====================================================================
@@ -3382,13 +3672,485 @@ function enhanceGanttTable(wrap) {
 }
 
 // =====================================================================
+// VISIBLE COLUMNS (A-1 / Bug-C)
+// =====================================================================
+const ALL_COLUMNS = [
+  'ID','WBS番号','アウトラインレベル','タスク名','Note','期間',
+  '開始日','終了日','基準開始日','基準終了日','実績開始日','実績終了日',
+  '残存期間','先行タスク','後続タスク','リソース名','達成率','状況','成果物',
+  'クリティカル','アクティブ','進捗状況'
+];
+const DEFAULT_VISIBLE_COLUMNS = ['タスク名','リソース名','開始日','終了日','達成率','状況','進捗状況'];
+
+function getVisibleColumns() {
+  try {
+    const s = localStorage.getItem('pj_visible_columns');
+    if (s) return JSON.parse(s);
+  } catch(_) {}
+  return DEFAULT_VISIBLE_COLUMNS.slice();
+}
+
+function saveVisibleColumns(cols) {
+  localStorage.setItem('pj_visible_columns', JSON.stringify(cols));
+}
+
+// Show toast notification
+function showToast(msg, duration) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => {
+    t.style.transition = 'opacity .3s';
+    t.style.opacity = '0';
+    setTimeout(() => t.remove(), 350);
+  }, duration || 3000);
+}
+
+// =====================================================================
+// SETTINGS MODAL
+// =====================================================================
+function openSettingsModal() {
+  renderVisibleColumnsTab();
+  renderAliasTab();
+  openModal('settings-modal');
+}
+
+function switchSettingsTab(tab) {
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('settings-tab-columns').style.display = tab === 'columns' ? '' : 'none';
+  document.getElementById('settings-tab-alias').style.display = tab === 'alias' ? '' : 'none';
+}
+
+function renderVisibleColumnsTab() {
+  const visible = getVisibleColumns();
+  const grid = document.getElementById('col-checkbox-grid');
+  if (!grid) return;
+  grid.innerHTML = ALL_COLUMNS.map(col => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+      <input type="checkbox" class="vcol-cb" value="${col}" ${visible.includes(col) ? 'checked' : ''}>
+      ${col}
+    </label>`).join('');
+}
+
+function renderAliasTab() {
+  const aliasMap = getAliasMap();
+  const tbody = document.getElementById('alias-tbody');
+  if (!tbody) return;
+
+  // Update datalist with current resource values
+  const dl = document.getElementById('alias-resource-list');
+  if (dl) {
+    const resources = new Set();
+    state.tasks.forEach(t => {
+      (t.resource || '').split(',').map(s => s.trim()).filter(Boolean).forEach(r => resources.add(r));
+    });
+    dl.innerHTML = [...resources].sort().map(r => `<option value="${r}">`).join('');
+  }
+
+  tbody.innerHTML = Object.entries(aliasMap).map(([from, to], i) => `
+    <tr>
+      <td style="padding:3px"><input type="text" class="alias-from" list="alias-resource-list" value="${escHtml(from)}" style="width:100%;border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px"></td>
+      <td style="padding:3px"><input type="text" class="alias-to" value="${escHtml(to)}" style="width:100%;border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px"></td>
+      <td style="padding:3px;text-align:center"><button class="btn btn-sm" style="color:#e53935;border-color:#e53935;padding:2px 6px" onclick="this.closest('tr').remove()">✕</button></td>
+    </tr>`).join('');
+}
+
+function addAliasRow() {
+  const tbody = document.getElementById('alias-tbody');
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="padding:3px"><input type="text" class="alias-from" list="alias-resource-list" placeholder="Excelの値" style="width:100%;border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px"></td>
+    <td style="padding:3px"><input type="text" class="alias-to" placeholder="表示名" style="width:100%;border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px"></td>
+    <td style="padding:3px;text-align:center"><button class="btn btn-sm" style="color:#e53935;border-color:#e53935;padding:2px 6px" onclick="this.closest('tr').remove()">✕</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function applySettings() {
+  // Visible columns
+  const checked = [...document.querySelectorAll('.vcol-cb:checked')].map(cb => cb.value);
+  saveVisibleColumns(checked);
+
+  // Alias map
+  const aliasMap = {};
+  document.querySelectorAll('#alias-tbody tr').forEach(tr => {
+    const from = tr.querySelector('.alias-from')?.value.trim();
+    const to = tr.querySelector('.alias-to')?.value.trim();
+    if (from && to && from !== to) aliasMap[from] = to;
+  });
+  saveAliasMap(aliasMap);
+
+  // Reapply alias and re-render
+  applyAliasToTasks();
+  computeAllStatuses();
+  closeModal('settings-modal');
+  renderScreen();
+  showToast('✅ 設定を保存しました');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// =====================================================================
+// ALIAS MAP (A-3)
+// =====================================================================
+function getAliasMap() {
+  try { return JSON.parse(localStorage.getItem('pj_alias_map') || '{}'); } catch(_) { return {}; }
+}
+
+function saveAliasMap(m) {
+  localStorage.setItem('pj_alias_map', JSON.stringify(m));
+}
+
+function applyAliasToTasks() {
+  const aliasMap = getAliasMap();
+  if (Object.keys(aliasMap).length === 0) return;
+  state.tasks.forEach(t => {
+    if (!t.resource) return;
+    t.resource = t.resource.split(',').map(s => {
+      const v = s.trim();
+      return aliasMap[v] || v;
+    }).join(', ');
+  });
+}
+
+// =====================================================================
+// DATA.JSON LOAD / EXPORT (A-4 / Bug-D)
+// =====================================================================
+
+// Projects loaded from data.json or localStorage (multi-project support)
+let _allProjects = [];  // [{name, tasks}]
+
+async function loadDataJson() {
+  try {
+    const res = await fetch('./data.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error('not found');
+    return await res.json();
+  } catch(_) {
+    return null;
+  }
+}
+
+function loadProjectsFromStorage() {
+  try {
+    const s = localStorage.getItem('pj_projects');
+    if (s) return JSON.parse(s);
+  } catch(_) {}
+  return null;
+}
+
+function saveProjectsToStorage(projects) {
+  try { localStorage.setItem('pj_projects', JSON.stringify(projects)); } catch(_) {}
+}
+
+function parseDataJson(json) {
+  if (!json || !Array.isArray(json.projects)) return null;
+  return json.projects.map(p => ({
+    name: p.name || 'プロジェクト',
+    tasks: (p.tasks || []).map(t => ({
+      ...t,
+      // Date fields may be stored as strings; convert back
+      bstart: t.bstart ? new Date(t.bstart) : null,
+      bend: t.bend ? new Date(t.bend) : null,
+      start: t.start ? new Date(t.start) : null,
+      end: t.end ? new Date(t.end) : null,
+      astart: t.astart ? new Date(t.astart) : null,
+      aend: t.aend ? new Date(t.aend) : null,
+    }))
+  }));
+}
+
+function showProjectSelectModal(projects) {
+  const list = document.getElementById('project-list');
+  if (!list) return;
+  list.innerHTML = projects.map((p, i) => `
+    <button class="btn btn-outline" style="padding:12px 16px;text-align:left;width:100%;font-size:13px" onclick="selectProject(${i})">
+      <div style="font-weight:600">${escHtml(p.name)}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px">${p.tasks.length}件のタスク</div>
+    </button>`).join('');
+  openModal('project-select-modal');
+}
+
+window.selectProject = function(idx) {
+  const p = _allProjects[idx];
+  if (!p) return;
+  state.projectName = p.name;
+  state.tasks = p.tasks.map(t => ({...t}));
+  applyAliasToTasks();
+  computeAllStatuses();
+  updateSidebarInfo();
+  closeModal('project-select-modal');
+  navigate('dashboard');
+};
+
+window.exportDataJson = function() {
+  if (!state.tasks.length) { alert('タスクデータがありません。Excelを読み込んでください。'); return; }
+  const json = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    projects: [{
+      name: state.projectName,
+      tasks: state.tasks.map(t => ({
+        ...t,
+        bstart: t.bstart instanceof Date ? t.bstart.toISOString().slice(0,10) : t.bstart,
+        bend: t.bend instanceof Date ? t.bend.toISOString().slice(0,10) : t.bend,
+        start: t.start instanceof Date ? t.start.toISOString().slice(0,10) : t.start,
+        end: t.end instanceof Date ? t.end.toISOString().slice(0,10) : t.end,
+        astart: t.astart instanceof Date ? t.astart.toISOString().slice(0,10) : t.astart,
+        aend: t.aend instanceof Date ? t.aend.toISOString().slice(0,10) : t.aend,
+      }))
+    }],
+    config: {
+      visibleColumns: getVisibleColumns(),
+      aliasMap: getAliasMap(),
+      departmentColors: DEPT_COLORS,
+    }
+  };
+  const blob = new Blob([JSON.stringify(json, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  showToast('✅ data.json をダウンロードしました');
+};
+
+// =====================================================================
+// COMMA-SPLIT FILTER (A-2 / Bug-C fix for filter)
+// =====================================================================
+function getUniqueResourceValues(tasks) {
+  const vals = new Set();
+  tasks.forEach(t => {
+    (t.resource || '').split(',').map(s => s.trim()).filter(Boolean).forEach(r => vals.add(r));
+  });
+  return [...vals].sort();
+}
+
+// =====================================================================
+// DASHBOARD ENHANCEMENTS (A-5, A-6)
+// =====================================================================
+function enhanceDashboard() {
+  // A-5: Apply column reorder to dashboard tables
+  document.querySelectorAll('#content table').forEach((tbl, i) => {
+    if (!tbl.querySelector('tbody')) return;
+    applyColReorder(tbl, 'dashboard_' + i);
+  });
+
+  // A-6: Sort on delay task table (first table in content)
+  const delayTbl = document.querySelector('#content table');
+  if (delayTbl && delayTbl.querySelector('tbody')) {
+    applyColSort(delayTbl);
+  }
+}
+
+function applyColSort(tableEl) {
+  const thead = tableEl.querySelector('thead');
+  if (!thead) return;
+  const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
+  if (!headerRow) return;
+  const ths = [...headerRow.cells];
+  let sortState = { col: -1, dir: 0 }; // dir: 0=none, 1=asc, -1=desc
+
+  ths.forEach((th, i) => {
+    th.style.cursor = 'pointer';
+    const origText = th.textContent.replace(/[▲▼]/g, '').trim();
+    th.addEventListener('click', (e) => {
+      if (e.target.classList.contains('filter-btn') || e.target.classList.contains('col-resizer')) return;
+      if (sortState.col === i) {
+        sortState.dir = sortState.dir === 1 ? -1 : sortState.dir === -1 ? 0 : 1;
+      } else {
+        sortState = { col: i, dir: 1 };
+      }
+      // Update header indicators
+      ths.forEach((t, j) => {
+        const base = t.textContent.replace(/[▲▼]/g, '').trim();
+        t.childNodes[0] && t.childNodes[0].nodeType === 3
+          ? (t.childNodes[0].textContent = base + (j === i && sortState.dir !== 0 ? (sortState.dir === 1 ? ' ▲' : ' ▼') : ''))
+          : null;
+        // Simple: set text directly if no other complex children
+        if (![...t.children].some(c => c.className && (c.className.includes('filter') || c.className.includes('resizer')))) {
+          t.textContent = base;
+          if (j === i && sortState.dir !== 0) t.textContent += sortState.dir === 1 ? ' ▲' : ' ▼';
+          // Re-attach filter/resize buttons that may have been removed
+        }
+      });
+      if (sortState.dir === 0) return;
+      const tbody = tableEl.querySelector('tbody');
+      if (!tbody) return;
+      const rows = [...tbody.querySelectorAll('tr')];
+      rows.sort((a, b) => {
+        const av = (a.cells[i] ? a.cells[i].textContent.trim() : '');
+        const bv = (b.cells[i] ? b.cells[i].textContent.trim() : '');
+        const an = parseFloat(av), bn = parseFloat(bv);
+        const cmp = (!isNaN(an) && !isNaN(bn)) ? (an - bn) : av.localeCompare(bv, 'ja');
+        return sortState.dir * cmp;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+}
+
+// =====================================================================
+// TIMELINE ENHANCEMENTS (A-7, A-8, A-9)
+// =====================================================================
+
+// A-9: ResizeObserver for timeline container height
+function initTimelineResizeObserver() {
+  const nav = document.getElementById('sidebar');
+  const topbar = document.getElementById('topbar');
+  const content = document.getElementById('content');
+  if (!content) return;
+
+  function updateTLHeight() {
+    const topH = topbar ? topbar.offsetHeight : 48;
+    content.style.height = `calc(100vh - ${topH}px)`;
+  }
+
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(updateTLHeight);
+    if (topbar) ro.observe(topbar);
+  }
+  updateTLHeight();
+}
+
+// A-9: Wheel scroll sync for timeline
+function initTimelineWheelSync() {
+  const labelsEl = document.getElementById('tl-labels');
+  const chartEl  = document.getElementById('tl-chart');
+  if (!labelsEl || !chartEl) return;
+  labelsEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    chartEl.scrollTop += e.deltaY;
+  }, { passive: false });
+}
+
+// =====================================================================
+// SESSION B IMPLEMENTATIONS
+// =====================================================================
+
+// B-2: Move "全期間表示" button location (already in gantt-controls; keep as is)
+// B-3: Ensure min width for gantt info columns
+function ensureGanttMinWidths() {
+  const fixedTbl = document.getElementById('gantt-fixed-tbl');
+  if (!fixedTbl) return;
+  const ths = [...fixedTbl.querySelectorAll('thead th')];
+  ths.forEach(th => {
+    const textW = th.textContent.trim().length * 8 + 16;
+    const currentW = parseFloat(th.style.width) || th.offsetWidth;
+    if (currentW < textW) {
+      th.style.width = textW + 'px';
+      th.style.minWidth = textW + 'px';
+    }
+  });
+}
+
+// B-4: TODAY line visibility improvement in gantt
+// (Already implemented via .today-col class; no extra action needed)
+
+// B-5: Gantt multi-level collapse
+window.toggleGanttRow = function(id) {
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  if (state.collapsedRows.has(id)) {
+    state.collapsedRows.delete(id);
+  } else {
+    state.collapsedRows.add(id);
+    // Also collapse nested summaries when parent collapsed
+    state.tasks.forEach(t => {
+      if (t.isSummary && t.wbs && task.wbs && t.wbs.startsWith(task.wbs + '.')) {
+        state.collapsedRows.delete(t.id);
+      }
+    });
+  }
+  localStorage.setItem('pj_gantt_collapsed', JSON.stringify([...state.collapsedRows]));
+  drawGantt();
+};
+
+// B-6: Toggle root task (ID=1)
+function getRootTaskVisible() {
+  return localStorage.getItem('pj_show_root_task') === 'true';
+}
+
+window.toggleRootTaskVisible = function(show) {
+  localStorage.setItem('pj_show_root_task', show ? 'true' : 'false');
+  drawGantt();
+};
+
+// B-7: Meeting textarea auto-resize
+function initTextareaAutoResize(container) {
+  (container || document).querySelectorAll('textarea.comment-input').forEach(ta => {
+    ta.style.width = '100%';
+    ta.style.resize = 'none';
+    function resize() {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    }
+    ta.addEventListener('input', resize);
+    resize();
+  });
+}
+
+// B-8: Dept all-tasks toggle
+function getDeptShowAll() {
+  return localStorage.getItem('pj_dept_show_all') === 'true';
+}
+
+// =====================================================================
 // INIT
 // =====================================================================
-function init() {
+async function init() {
   loadStorage();
   initTheme();
   initMsal();
+
+  // A-4 / Bug-D: try to load data.json first
+  const dataJson = await loadDataJson();
+
+  if (dataJson && dataJson.projects && dataJson.projects.length) {
+    const projects = parseDataJson(dataJson);
+    if (projects && projects.length) {
+      _allProjects = projects;
+      saveProjectsToStorage(projects);
+
+      // Apply config from data.json if no local settings
+      if (dataJson.config) {
+        if (!localStorage.getItem('pj_visible_columns') && dataJson.config.visibleColumns) {
+          saveVisibleColumns(dataJson.config.visibleColumns);
+        }
+        if (!localStorage.getItem('pj_alias_map') && dataJson.config.aliasMap) {
+          saveAliasMap(dataJson.config.aliasMap);
+        }
+      }
+
+      initTheme(); updateSidebarInfo();
+      if (projects.length === 1) {
+        selectProject(0);
+      } else {
+        showProjectSelectModal(projects);
+      }
+      return;
+    }
+  }
+
+  // Fallback: check localStorage for saved projects
+  const savedProjects = loadProjectsFromStorage();
+  if (savedProjects && savedProjects.length) {
+    _allProjects = savedProjects;
+    if (savedProjects.length === 1) {
+      selectProject(0);
+    } else {
+      showProjectSelectModal(savedProjects);
+    }
+    return;
+  }
+
+  // No data: use sample data and go to dashboard
   state.tasks = SAMPLE_TASKS.map(t => ({...t}));
+  applyAliasToTasks();
   computeAllStatuses();
   updateSidebarInfo();
   navigate('dashboard');
