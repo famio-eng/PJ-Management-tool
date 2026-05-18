@@ -55,33 +55,45 @@ SharePoint共有フォルダ
 - 達成率の0〜1小数→0〜100整数変換
 - シート名`タスク_テーブル1`対応
 
-### Phase 1b Session A（一部完了・不具合修正中）
-- A-1. 表示列設定モーダル：実装済み・不具合修正中
-- A-2. 担当部門カンマ区切り対応：実装済み・不具合修正中
-- A-3. エイリアス設定（datalist候補表示対応）：実装済み
-- A-4. プロジェクト選択・自動読み込み：実装済み・不具合修正中
-- A-5. ダッシュボード列並び替え：実装済み
-- A-6. ダッシュボード遅延タスクフィルター・ソート：実装済み・不具合修正中
-- A-7. タイムライン列幅調整・表示項目連動：実装済み・不具合修正中
-- A-8. タイムラインサマリータスク折りたたみ（多階層）：実装済み・不具合修正中
-- A-9. タイムライン縦幅拡張・スクロール改善：実装済み・不具合修正中
+### Phase 1b Session A（完了）
+- A-1. 表示列設定モーダル（⚙設定 > 表示列タブ）：完了
+- A-2. 担当部門カンマ区切り対応：完了（getDeptColor・フィルター対応済み）
+- A-3. エイリアス設定datalist対応（⚙設定 > エイリアスタブ）：完了
+- A-4. data.json自動読み込み + プロジェクト選択モーダル + JSON出力ボタン：完了
+- A-5. ダッシュボード列並び替え（applyColReorder）：完了
+- A-6. ダッシュボード遅延タスク3ステートソート：完了
+- A-7. タイムライン列幅調整（applyColResize/pj_column_widths_timeline）：完了
+- A-8. タイムライン多階層折りたたみ（子サマリー連動・pj_timeline_collapsed保存）：完了
+- A-9. ResizeObserver高さ動的計算 + ホイールスクロール同期：完了
+- A-10. index.html → Pj-Viewer.html リネーム・titleタグ更新：完了
+
+### Phase 1b Session B（完了）
+- B-1. NW図タイムラインNWモード追加（renderTimelineNW・モード切替ボタン）：完了
+- B-2. ガントチャート「全期間表示」ボタンを凡例エリア内に移動：完了
+- B-3. ガントチャートタスク情報列最小幅保証（ensureGanttMinWidths）：完了
+- B-4. ガントチャートTODAY列赤border-left・視認性向上：完了
+- B-5. ガントチャートサマリータスク多階層折りたたみ（wbsプレフィックス方式）：完了
+- B-6. ガントチャートID=1プロジェクトサマリー行表示切り替えチェックボックス：完了
+- B-7. 定例ビュー textareaオートリサイズ・スクロールバースタイル統一：完了
+- B-8. 機能別進捗報告 textareaオートリサイズ・saveDeptCommentにトースト：完了
 
 ---
 
-## 未解決バグ（要対応）
+## バグ修正済み
 
-### [Bug-A] ガントチャート固定列がウィンドウ幅いっぱいに展開される
-- LocalStorageの旧キー削除コードを`enhanceGanttTable()`冒頭に追加すること
-```javascript
-localStorage.removeItem('pj_column_widths_gantt');
-```
+### [Bug-A] ガントチャート固定列がウィンドウ幅いっぱいに展開される → 修正済み
+- `enhanceGanttTable()`冒頭で`localStorage.removeItem('pj_column_widths_gantt')`を実施
 
-### [Bug-B] NW図サブグラフが新規ウィンドウで描画されない
-- D3をインライン埋め込みしてCDN依存を排除するアプローチで対応すること
+### [Bug-B] NW図サブグラフが新規ウィンドウで描画されない → 修正済み
+- `buildSubgraphWindowHTML`をD3なしのバニラJS SVG実装に全面書き換え
+- CDN依存・window.opener依存を完全排除
 
-### [Bug-C] A-1 表示列設定がビューに反映されない
-- 列の非表示時に`display:none`・`width:0`・`padding:0`・`border:0`をセットで適用すること
-- 適用ボタン押下時に現在ビューの再描画関数を明示的に呼び出すこと
+### [Bug-C] A-1 表示列設定がビューに反映されない → 修正済み
+- 設定モーダルの「適用」ボタンでrenderScreen()を明示的に呼び出し
+- pj_visible_columnsにLocalStorage保存・起動時復元
+
+### [Bug-D] A-4 起動時プロジェクト選択画面が表示されない → 修正済み
+- DOMContentLoadedでdata.json fetchを試みてプロジェクト選択モーダルを表示
 
 ### [Bug-D] A-4 起動時プロジェクト選択画面が表示されない
 - `DOMContentLoaded`の先頭でdata.json fetchまたはLocalStorage確認を行い、データがある場合は選択モーダルを表示すること
@@ -89,19 +101,12 @@ localStorage.removeItem('pj_column_widths_gantt');
 ---
 
 ## 未着手
+（Phase 1b Session A / B の全項目が完了しました）
 
-### Phase 1b Session A
-- A-10. ファイル名を`index.html`→`Pj-Viewer.html`にリネーム
-
-### Phase 1b Session B（Session A完了後に着手）
-- B-1. NW図タイムラインNWモード追加
-- B-2. ガントチャート「全期間表示」ボタン移動
-- B-3. ガントチャートタスク情報列最小幅保証
-- B-4. ガントチャートTODAY列視認性向上
-- B-5. ガントチャートサマリータスク多階層折りたたみ
-- B-6. ガントチャートID=1タスク表示切り替え
-- B-7. 定例ビューUI改善
-- B-8. 機能別進捗報告UI改善
+### Phase 2 以降（将来予定）
+- Graph API連携（Azure AD ClientID取得後）
+- B-8-4: 機能別進捗報告 全タスク表示モード（Close含む全期間表示）
+- B-8-5: 機能別進捗報告 タスク情報/進捗コメント幅リサイズ
 
 ---
 
