@@ -2726,6 +2726,15 @@ function drawGantt() {
   // Build visible fixed columns from full definition, filtering by isColVisible()
   let fixedCols = GANTT_FIXED_COLS_DEF.filter(c => c.alwaysOn || isColVisible(c.visKey));
 
+  // ── Column fingerprint: clear saved widths when visible column set changes ──
+  // This prevents stale localStorage widths from being applied to a different column layout.
+  const colFingerprint = fixedCols.map(c => c.key).join(',');
+  if (colFingerprint !== localStorage.getItem('pj_gantt_col_fingerprint')) {
+    localStorage.setItem('pj_gantt_col_fingerprint', colFingerprint);
+    localStorage.removeItem('pj_column_widths_gantt_fixed');
+    localStorage.removeItem('pj_gantt_left_w');
+  }
+
   const visibleTasks = [];
   const hiddenParents = new Set();
   state.tasks.forEach(t => {
@@ -2850,7 +2859,10 @@ function drawGantt() {
     if (savedLeftW) {
       gLeft.style.width = savedLeftW;
     } else {
-      gLeft.style.width = leftNaturalW + 'px';
+      // Use natural width and persist it so divider drag can be relative to it
+      const w = Math.max(leftNaturalW, totalDefaultWidth);
+      gLeft.style.width = w + 'px';
+      localStorage.setItem('pj_gantt_left_w', w + 'px');
     }
   });
 
