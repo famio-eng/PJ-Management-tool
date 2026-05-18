@@ -1936,19 +1936,52 @@ function initAliasUI() {
   (state.aliasList || []).forEach(a => list.appendChild(createAliasRowEl(a.from, a.to)));
 }
 
+function getUniqueRawResources() {
+  const set = new Set();
+  // Prefer raw project data (pre-alias) for accurate candidate list
+  (state.projectList || []).forEach(p => {
+    try {
+      JSON.parse(p.data).forEach(row => {
+        const r = row['リソース名'] || row['resource'] || '';
+        if (r) r.split(',').map(s => s.trim()).filter(Boolean).forEach(v => set.add(v));
+      });
+    } catch(e) {}
+  });
+  // Fallback: current tasks (may already be aliased)
+  if (set.size === 0) {
+    (state.tasks || []).forEach(t => {
+      if (t.resource) t.resource.split(',').map(s => s.trim()).filter(Boolean).forEach(v => set.add(v));
+    });
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'ja'));
+}
+
 function createAliasRowEl(from, to) {
   const row = document.createElement('div');
   row.className = 'alias-row';
+
+  // Datalist for "Excelの値" input — populated from raw resource names
+  const dlId = 'alias-dl-' + Math.random().toString(36).slice(2, 8);
+  const dl = document.createElement('datalist');
+  dl.id = dlId;
+  getUniqueRawResources().forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r;
+    dl.appendChild(opt);
+  });
+  row.appendChild(dl);
+
   const inp1 = document.createElement('input');
-  inp1.type='text'; inp1.placeholder='Excelの値'; inp1.value=from||'';
+  inp1.type = 'text'; inp1.placeholder = 'Excelの値'; inp1.value = from || '';
+  inp1.setAttribute('list', dlId);
   const arr = document.createElement('span');
-  arr.style.cssText='color:#888;font-size:12px;flex-shrink:0'; arr.textContent='→';
+  arr.style.cssText = 'color:#888;font-size:12px;flex-shrink:0'; arr.textContent = '→';
   const inp2 = document.createElement('input');
-  inp2.type='text'; inp2.placeholder='正規化後'; inp2.value=to||'';
+  inp2.type = 'text'; inp2.placeholder = '正規化後'; inp2.value = to || '';
   const del = document.createElement('button');
-  del.className='btn btn-sm';
-  del.style.cssText='background:#fef;border:1px solid #fcc;font-size:11px;flex-shrink:0';
-  del.textContent='削除'; del.onclick=()=>row.remove();
+  del.className = 'btn btn-sm';
+  del.style.cssText = 'background:#fef;border:1px solid #fcc;font-size:11px;flex-shrink:0';
+  del.textContent = '削除'; del.onclick = () => row.remove();
   row.appendChild(inp1); row.appendChild(arr); row.appendChild(inp2); row.appendChild(del);
   return row;
 }
@@ -3716,7 +3749,8 @@ function enhanceGanttTable(wrap) {
         const idx = fixedThs.findIndex(t => (t.dataset.colKey||'') === colKey);
         if (idx < 0) return;
         const td = tr.cells[idx];
-        if (!allowed.includes(td ? td.textContent.trim() : '')) visible = false;
+        const cellVals = (td ? td.textContent.trim() : '').split(',').map(s => s.trim()).filter(Boolean);
+        if (!cellVals.some(v => allowed.includes(v))) visible = false;
       });
       tr.style.display = visible ? '' : 'none';
     });
@@ -3728,7 +3762,14 @@ function enhanceGanttTable(wrap) {
   fixedThs.forEach((th, colIdx) => {
     const colKey = th.dataset.colKey || String(colIdx);
     th.querySelectorAll('.filter-btn').forEach(b => b.remove());
-    const vals = [...new Set(leftTrs.map(tr => { const td = tr.cells[colIdx]; return td ? td.textContent.trim() : ''; }).filter(v => v))];
+    // Split comma-separated values (e.g. "R&D,RA") into individual filter options
+    const valSet = new Set();
+    leftTrs.forEach(tr => {
+      const td = tr.cells[colIdx];
+      const raw = td ? td.textContent.trim() : '';
+      raw.split(',').map(s => s.trim()).filter(Boolean).forEach(v => valSet.add(v));
+    });
+    const vals = [...valSet].filter(v => v);
     if (!vals.length) return;
     const btn = document.createElement('span');
     btn.className = 'filter-btn' + (savedF[colKey] ? ' active' : '');
