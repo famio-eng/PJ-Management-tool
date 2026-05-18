@@ -1497,7 +1497,7 @@ function buildTLTaskListHTML() {
   const showResource = isColVisible('resource');
   const showStatus   = isColVisible('status_col');
 
-  let html = `<table id="tl-task-list-tbl" style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">
+  let html = `<table id="tl-task-list-tbl" style="min-width:100%;width:auto;border-collapse:collapse;font-size:11px;table-layout:fixed">
     <thead><tr id="tl-tasklist-header" style="background:#f0f4fa;position:sticky;top:0;z-index:1">
       <th style="width:28px;padding:4px 6px;text-align:center;position:relative">
         <input type="checkbox" id="tl-chk-all" ${allChecked?'checked':''} onchange="toggleAllTLTasks(this.checked)">
@@ -1549,13 +1549,26 @@ function buildTLTaskListHTML() {
 }
 
 window.toggleTLCollapse = function(id) {
-  state.tlCollapseState[id] = !state.tlCollapseState[id];
+  const nowCollapsed = !state.tlCollapseState[id];
+  state.tlCollapseState[id] = nowCollapsed;
+  // When collapsing a parent, reset all descendant summary collapse states
+  if (nowCollapsed) {
+    const childrenOf = buildChildrenMap();
+    const stack = [...(childrenOf[id] || [])];
+    while (stack.length) {
+      const cid = stack.pop();
+      delete state.tlCollapseState[cid];
+      (childrenOf[cid] || []).forEach(cc => stack.push(cc));
+    }
+  }
   localStorage.setItem('pj_timeline_collapsed', JSON.stringify(state.tlCollapseState));
   const parentOf = buildParentMap();
+  const childrenOf2 = buildChildrenMap();
   const activeTasks = state.tasks.filter(t => t.active !== 'いいえ');
   activeTasks.forEach(t => {
     const row = document.querySelector(`[data-tl-task="${t.id}"]`);
     if (!row) return;
+    // Determine visibility: hidden if any ancestor is collapsed
     let hidden = false;
     let pid = parentOf[t.id];
     while (pid != null) {
@@ -1563,9 +1576,11 @@ window.toggleTLCollapse = function(id) {
       pid = parentOf[pid];
     }
     row.style.display = hidden ? 'none' : '';
-    if (t.id === id) {
+    // Update collapse toggle button for ALL summary tasks
+    const hasSummaryChildren = (childrenOf2[t.id] || []).some(cid => state.tlSelectedIds.has(cid));
+    if (hasSummaryChildren) {
       const btn = row.querySelector('span[onclick^="toggleTLCollapse"]');
-      if (btn) btn.textContent = state.tlCollapseState[id] ? '▶' : '▼';
+      if (btn) btn.textContent = state.tlCollapseState[t.id] ? '▶' : '▼';
     }
   });
   drawTimeline();
@@ -1652,7 +1667,7 @@ function renderTimeline() {
         <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
         <span id="tl-panel-arrow">▼</span>
       </div>
-      <div id="tl-task-list" style="overflow-y:auto">
+      <div id="tl-task-list" style="overflow-y:auto;overflow-x:auto">
         ${buildTLTaskListHTML()}
       </div>
     </div>`;
@@ -1661,13 +1676,24 @@ function renderTimeline() {
   scrollTLToday();
 
   // A-7: apply column resize to task list table
+  // Clear saved widths when visible column set changes (same fingerprint strategy as gantt)
   const tlTbl = document.getElementById('tl-task-list-tbl');
-  if (tlTbl) applyColResize(tlTbl, 'timeline');
+  if (tlTbl) {
+    const tlColFp = (isColVisible('bstart')?'bs':'')+','+(isColVisible('bend')?'be':'')+','+(isColVisible('resource')?'r':'')+','+(isColVisible('status_col')?'s':'');
+    if (tlColFp !== localStorage.getItem('pj_tl_col_fingerprint')) {
+      localStorage.setItem('pj_tl_col_fingerprint', tlColFp);
+      localStorage.removeItem('pj_column_widths_timeline');
+    }
+    applyColResize(tlTbl, 'timeline');
+  }
 
-  // A-9: adjust task list height to fill remaining viewport
-  adjustTLHeight();
-  window._tlResizeHandler = adjustTLHeight;
-  window.addEventListener('resize', window._tlResizeHandler);
+  // A-9: adjust task list height after layout is complete
+  requestAnimationFrame(() => {
+    adjustTLHeight();
+    window._tlResizeHandler = adjustTLHeight;
+    if (window._tlResizeHandler) window.removeEventListener('resize', window._tlResizeHandler);
+    window.addEventListener('resize', window._tlResizeHandler);
+  });
 }
 
 function adjustTLHeight() {
@@ -2939,8 +2965,16 @@ function drawGantt() {
   const gLeft  = document.getElementById('gantt-left');
   const splitOuter = wrap.querySelector('.gantt-split-outer');
 
-  // Vertical scroll sync
-  if (gRight && gLeft) gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+  // Vertical scroll sync: right drives left, and left panel wheel proxies to right
+  if (gRight && gLeft) {
+    gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+    gLeft.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        gRight.scrollBy(0, e.deltaY);
+      }
+    }, { passive: false });
+  };
 
   // ── Left panel initial width ──
   requestAnimationFrame(() => {
