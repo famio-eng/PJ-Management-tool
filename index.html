@@ -240,7 +240,7 @@ body.dark .pj-selector-wrap select{border-color:rgba(255,255,255,.2)}
 .alias-row input{flex:1;border:1px solid #ccc;border-radius:3px;padding:4px 7px;font-size:12px}
 body.dark .alias-row input{background:#1a1a2e;border-color:#3a3a5c;color:#e0e0e0}
 /* Sort button */
-.sort-btn{font-size:10px;margin-left:2px;cursor:pointer;color:#bbb;border:none;background:none;padding:1px 2px;vertical-align:middle;user-select:none}
+.sort-btn{font-size:10px;margin-left:2px;cursor:pointer;color:#bbb;border:none;background:none;padding:1px 2px;vertical-align:middle;user-select:none;position:relative;z-index:3}
 .sort-btn.asc,.sort-btn.desc{color:#4472C4;font-weight:700}
 body.dark .sort-btn.asc,body.dark .sort-btn.desc{color:#90b8e0}
 /* Night mode toggle */
@@ -260,7 +260,8 @@ body.dark #auth-user-display{background:#243555;color:#90b8e0}
 /* Column filter dropdown */
 .col-filter-dropdown{position:fixed;background:#fff;border:1px solid #ccc;border-radius:6px;padding:8px;z-index:9999;max-height:240px;overflow-y:auto;box-shadow:0 4px 14px rgba(0,0,0,.18);min-width:160px;font-size:12px}
 body.dark .col-filter-dropdown{background:#16213e;border-color:#3a3a5c;color:#e0e0e0}
-.filter-btn{font-size:9px;margin-left:3px;cursor:pointer;color:#bbb;border:none;background:none;padding:1px 2px;vertical-align:middle}
+/* filter-btn and sort-btn must sit above col-resizer (z-index:2) */
+.filter-btn{font-size:9px;margin-left:3px;cursor:pointer;color:#bbb;border:none;background:none;padding:1px 2px;vertical-align:middle;position:relative;z-index:3}
 .filter-btn.active{color:#4472C4;font-weight:700}
 body.dark .filter-btn.active{color:#90b8e0}
 /* Drag over for col reorder */
@@ -414,6 +415,18 @@ body.dark #tl-task-list td, body.dark #tl-task-list th { color: #c8d4e8; border-
     <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid #e0e0e0;flex-shrink:0">
       <button class="btn btn-outline" onclick="closeModal('settings-modal')">閉じる</button>
       <button class="btn btn-primary" onclick="applySettings()">適用</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROJECT SELECT MODAL (shown on startup when projects exist) ===== -->
+<div class="modal-overlay" id="project-select-modal">
+  <div class="modal" style="width:500px;max-width:95vw">
+    <h3 style="margin-bottom:4px">📂 プロジェクトを選択</h3>
+    <div style="font-size:12px;color:#888;margin-bottom:16px">読み込むプロジェクトを選択してください</div>
+    <div id="project-select-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;margin-bottom:16px"></div>
+    <div style="border-top:1px solid #e0e0e0;padding-top:12px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="openAddProjectModal()">＋ 新規プロジェクト追加</button>
     </div>
   </div>
 </div>
@@ -1231,7 +1244,7 @@ function renderDashboard() {
   <div class="section">
     <h2>🔴 遅延タスク一覧（${delayTasks.length}件）</h2>
     ${delayTasks.length === 0 ? '<p class="text-muted">遅延タスクはありません</p>' :
-    `<table>
+    `<table id="delay-tasks-tbl">
       <thead><tr><th>WBS</th><th>タスク名</th><th>担当</th><th>基準終了日</th><th>達成率</th><th>CP</th><th>NW</th></tr></thead>
       <tbody>${delayTasks.map(t => `
         <tr>
@@ -1309,8 +1322,8 @@ function renderDashboard() {
     }
   });
 
-  // A-6: sort for delay tasks table (first table)
-  const delayTbl = document.querySelector('#content .section table');
+  // A-6: sort for delay tasks table specifically
+  const delayTbl = document.getElementById('delay-tasks-tbl');
   if (delayTbl) applyTableSort(delayTbl);
 }
 
@@ -1319,6 +1332,11 @@ function applyTableSort(tableEl) {
   if (!thead) return;
   const headerRow = thead.querySelector('tr:last-child') || thead.querySelector('tr');
   if (!headerRow) return;
+  // Stamp original row order before any sort (needed for reset)
+  const tbody = tableEl.querySelector('tbody');
+  if (tbody) {
+    [...tbody.querySelectorAll('tr')].forEach((r, i) => { r.dataset.origIdx = i; });
+  }
   let sortCol = -1, sortDir = 0;
   [...headerRow.cells].forEach((th, ci) => {
     th.querySelectorAll('.sort-btn').forEach(b => b.remove());
@@ -1333,20 +1351,22 @@ function applyTableSort(tableEl) {
       else { sortCol = ci; sortDir = 1; }
       headerRow.querySelectorAll('.sort-btn').forEach(b => { b.className = 'sort-btn'; b.textContent = '↕'; });
       if (sortDir === 0) { btn.textContent = '↕'; sortCol = -1; }
-      else { btn.className = 'sort-btn ' + (sortDir === 1 ? 'asc' : 'desc'); btn.textContent = sortDir === 1 ? '↑' : '↓'; }
+      else { btn.className = 'sort-btn ' + (sortDir === 1 ? 'asc' : 'desc'); btn.textContent = sortDir === 1 ? '▲' : '▼'; }
       const tbody = tableEl.querySelector('tbody');
       if (!tbody) return;
       const rows = [...tbody.querySelectorAll('tr')];
       if (sortDir === 0) {
-        rows.sort((a, b) => parseInt(a.dataset.origIdx||0) - parseInt(b.dataset.origIdx||0));
+        rows.sort((a, b) => parseInt(a.dataset.origIdx || 0) - parseInt(b.dataset.origIdx || 0));
       } else {
         rows.sort((a, b) => {
           const va = a.cells[ci]?.textContent.trim() || '';
           const vb = b.cells[ci]?.textContent.trim() || '';
+          const na = parseFloat(va.replace(/[^0-9.\-]/g, '')), nb = parseFloat(vb.replace(/[^0-9.\-]/g, ''));
+          if (!isNaN(na) && !isNaN(nb)) return sortDir === 1 ? na - nb : nb - na;
           return sortDir === 1 ? va.localeCompare(vb, 'ja') : vb.localeCompare(va, 'ja');
         });
       }
-      rows.forEach((r, i) => { if (!r.dataset.origIdx) r.dataset.origIdx = i; tbody.appendChild(r); });
+      rows.forEach(r => tbody.appendChild(r));
     });
   });
 }
@@ -2040,6 +2060,44 @@ window.switchProject = function(idx) {
   }
 };
 
+function showProjectSelectModal() {
+  const list = document.getElementById('project-select-list');
+  if (!list) return;
+  list.innerHTML = '';
+  state.projectList.forEach((p, idx) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e0e0e0;border-radius:6px';
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0';
+    info.innerHTML = `<div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px">最終登録: ${p.lastLoaded || '—'}</div>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary btn-sm';
+    btn.textContent = '読み込み';
+    btn.onclick = () => loadProjectFromModal(idx);
+    row.appendChild(info);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+  openModal('project-select-modal');
+}
+
+window.loadProjectFromModal = function(idx) {
+  const p = state.projectList[parseInt(idx)];
+  if (!p || !p.data) { showToast('データが見つかりません', 'error'); return; }
+  try {
+    processExcelRows(JSON.parse(p.data));
+    state.currentProjectName = p.name;
+    state.projectName = p.name;
+    state.tlSelectedIds.clear(); state.tlExpandedIds.clear();
+    computeAllStatuses();
+    updateSidebarInfo();
+    initProjectSelector();
+    closeModal('project-select-modal');
+    navigate('dashboard');
+  } catch(e) { showToast('読み込みに失敗しました: ' + e.message, 'error'); }
+};
+
 window.openAddProjectModal = function() {
   document.getElementById('new-pj-name').value = '';
   document.getElementById('new-pj-filename').textContent = 'ファイル未選択';
@@ -2088,7 +2146,8 @@ window.confirmAddProject = function() {
       updateSidebarInfo();
       initProjectSelector();
       closeModal('add-project-modal');
-      renderScreen();
+      closeModal('project-select-modal');
+      navigate('dashboard');
       showToast('✅ ' + name + ' を登録しました');
     } catch(e) { alert('Excelの読み込みに失敗しました: ' + e.message); }
   };
@@ -3853,18 +3912,16 @@ function init() {
   initTheme();
   initMsal();
   initProjectSelector();
-  // Load last project if available, else use sample data
-  if (state.projectList.length > 0 && state.currentProjectName) {
-    const p = state.projectList.find(x => x.name === state.currentProjectName);
-    if (p && p.data) {
-      try { processExcelRows(JSON.parse(p.data)); } catch(e) { state.tasks = SAMPLE_TASKS.map(t=>({...t})); }
-    } else { state.tasks = SAMPLE_TASKS.map(t => ({...t})); }
-  } else {
-    state.tasks = SAMPLE_TASKS.map(t => ({...t}));
-  }
+  // Always start with sample data so sidebar/statusbar has valid state
+  state.tasks = SAMPLE_TASKS.map(t => ({...t}));
   computeAllStatuses();
   updateSidebarInfo();
-  navigate('dashboard');
+  if (state.projectList.length > 0) {
+    // Show project selection modal before rendering main content
+    showProjectSelectModal();
+  } else {
+    navigate('dashboard');
+  }
 }
 
 init();
