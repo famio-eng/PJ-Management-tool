@@ -128,7 +128,12 @@ body.dark .today-col{background:#3d2010 !important;border-left-color:#ef5350 !im
 .mtg-upcoming-start{background:#FFF8E1;color:#E65100}
 .mtg-upcoming-end{background:#E8F5E9;color:#1B5E20}
 .mtg-cp{background:#FFEBEE;color:#C62828}
-textarea.comment-input{border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px;width:140px;resize:none;height:38px;font-family:inherit}
+textarea.comment-input{border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px;width:100%;min-width:120px;resize:none;min-height:38px;font-family:inherit;box-sizing:border-box}
+/* B-7/8: scrollbar style for meeting/dept views */
+#content::-webkit-scrollbar{width:10px}
+#content::-webkit-scrollbar-track{background:var(--bg,#f0f2f5)}
+#content::-webkit-scrollbar-thumb{background:#888;border-radius:5px}
+#content::-webkit-scrollbar-thumb:hover{background:#555}
 textarea.comment-input.saved{background:#E8F5E9;border-color:#A5D6A7}
 /* Actions */
 .action-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
@@ -1426,9 +1431,23 @@ window.toggleTLPanel = function() {
   if (arrow) arrow.textContent = hidden ? '▼' : '▶';
 };
 
+// A-8: Multi-level timeline collapse
 window.toggleTLExpand = function(id) {
-  if (state.tlExpandedIds.has(id)) state.tlExpandedIds.delete(id);
-  else state.tlExpandedIds.add(id);
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  if (state.tlExpandedIds.has(id)) {
+    // Collapsing: also collapse all child summaries
+    state.tlExpandedIds.delete(id);
+    state.tasks.forEach(t => {
+      if (t.id !== id && t.isSummary && t.wbs && task.wbs && t.wbs.startsWith(task.wbs + '.')) {
+        state.tlExpandedIds.delete(t.id);
+      }
+    });
+  } else {
+    state.tlExpandedIds.add(id);
+  }
+  // Persist
+  try { localStorage.setItem('pj_timeline_collapsed', JSON.stringify([...state.tlExpandedIds])); } catch(_) {}
   drawTimeline();
 };
 
@@ -1481,8 +1500,10 @@ function renderTimeline() {
 
   drawTimeline();
   scrollTLToday();
-  // A-9: wheel scroll sync + height
+  // A-7: column resize on task list table; A-9: wheel sync
   requestAnimationFrame(() => {
+    const tlTbl = document.querySelector('#tl-task-list table');
+    if (tlTbl) applyColResize(tlTbl, 'timeline');
     initTimelineResizeObserver();
     initTimelineWheelSync();
   });
@@ -2538,7 +2559,6 @@ function renderGantt() {
         ${GANTT_PERIODS.map(p => `<button class="btn btn-sm ${state.ganttPeriod===p.key?'btn-primary':'btn-outline'}" onclick="setGanttPeriod('${p.key}')">${p.label}</button>`).join('')}
         <span style="width:8px"></span>
         <button class="btn btn-sm btn-outline gantt-auto-fit-btn" title="タスク情報列の幅をコンテンツに合わせて最適化">情報列幅調整</button>
-        <button class="btn btn-sm btn-outline gantt-cal-fit-btn" title="プロジェクト全期間がカレンダー表示領域に収まるよう列幅を調整">全期間表示</button>
         <label style="font-size:11px;display:flex;align-items:center;gap:4px">
           <input type="checkbox" id="gantt-show-root" ${getRootTaskVisible() ? 'checked' : ''} onchange="toggleRootTaskVisible(this.checked)">プロジェクトサマリー行
         </label>
@@ -2546,6 +2566,8 @@ function renderGantt() {
         <span style="font-size:11px;color:#888">
           <span style="display:inline-block;width:12px;height:6px;background:#4472C4;border-radius:1px;opacity:.8;vertical-align:middle;margin-right:3px"></span>基準計画
           <span style="display:inline-block;width:12px;height:6px;background:#00B050;border-radius:1px;opacity:.85;vertical-align:middle;margin-right:3px"></span>実績
+          &nbsp;
+          <button class="btn btn-sm btn-outline gantt-cal-fit-btn" title="プロジェクト全期間がカレンダー表示領域に収まるよう列幅を調整" style="font-size:10px;padding:2px 7px">全期間表示</button>
         </span>
       </div>
       <div id="gantt-wrap"></div>
@@ -3669,6 +3691,9 @@ function enhanceGanttTable(wrap) {
       drawGantt();
     });
   });
+
+  // B-3: ensure minimum widths
+  requestAnimationFrame(() => ensureGanttMinWidths());
 }
 
 // =====================================================================
