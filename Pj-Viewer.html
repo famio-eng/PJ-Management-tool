@@ -1993,35 +1993,17 @@ window.showNWContextMenu = function(event, id) {
 window.closeNWSubPanel = function() { /* new-window approach: no-op */ };
 window.closeNWSubModal = window.closeNWSubPanel;
 
-// D3 source cache — fetched once, embedded inline in subgraph popup to avoid CDN/CSP issues
-let _d3SourceCache = null;
-async function _fetchD3Source() {
-  if (_d3SourceCache) return _d3SourceCache;
-  try {
-    const r = await fetch('https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js');
-    if (r.ok) _d3SourceCache = await r.text();
-  } catch(e) {}
-  return _d3SourceCache;
-}
-
-// NW subgraph — Blob URL + inline D3 + embedded data (no CDN, no window.opener)
-window.showNWSubPanel = async function(id) {
+// NW subgraph — Blob URL + vanilla JS SVG (no CDN D3 dependency)
+window.showNWSubPanel = function(id) {
   if (!id) return;
   const depth = state.nwSubPanelDepth || 2;
   const task  = state.tasks.find(t => t.id === id);
   const title = task ? task.name : String(id);
 
-  const d3src = await _fetchD3Source();
-  if (!d3src) {
-    alert('D3ライブラリの取得に失敗しました。インターネット接続を確認してページをリロードしてください。');
-    return;
-  }
-
-  // Embed data as JSON literal; escape </ to prevent HTML parser from closing the script tag early
   const dataJson = JSON.stringify({ tasks: state.tasks, focusId: id, title: title, depth: depth, isDark: document.body.classList.contains('dark') })
     .replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
-  const html = buildSubgraphWindowHTML(d3src, dataJson);
+  const html = buildSubgraphWindowHTML(dataJson);
   const blob = new Blob([html], {type: 'text/html;charset=utf-8'});
   const blobUrl = URL.createObjectURL(blob);
   const win = window.open(blobUrl, '_blank',
@@ -2031,19 +2013,16 @@ window.showNWSubPanel = async function(id) {
   setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 };
 
-function buildSubgraphWindowHTML(d3src, dataJson) {
-  // D3 is inlined (no CDN dependency).
-  // Data is embedded as a JSON literal (no window.opener dependency).
-  // All functions are at top level so HTML onclick/oninput attrs can call them.
+// Vanilla JS SVG subgraph builder — no D3 CDN dependency, no window.opener
+function buildSubgraphWindowHTML(dataJson) {
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8"><title>サブグラフ</title>
-<script>${d3src}<\/script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Segoe UI","Meiryo",sans-serif;background:#f4f6fb;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 #hdr{display:flex;align-items:center;gap:14px;padding:9px 16px;background:#f0f4fa;border-bottom:1px solid #dde4f0;flex-shrink:0;flex-wrap:wrap}
 #hdr h2{font-size:13px;color:#1a3a5c;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}
-#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab}
+#ctnr{flex:1;overflow:hidden;background:#f8f9fc;cursor:grab;position:relative}
 #ctnr:active{cursor:grabbing}
 svg{display:block;width:100%;height:100%}
 .btn{font-size:12px;border-radius:4px;padding:4px 10px;cursor:pointer;border:1px solid #ccc;background:#fff}
@@ -2055,11 +2034,9 @@ body.dark{background:#1a1a2e;color:#e0e0e0}
 body.dark #hdr{background:#16213e;border-color:#3a3a5c;color:#e0e0e0}
 body.dark #hdr h2{color:#90b8e0}
 body.dark #ctnr{background:#0f1923}
-body.dark svg{background:#0f1923}
 body.dark .btn{background:#1e2a45;border-color:#3a3a5c;color:#ccc}
 body.dark .btn:hover{background:#243555}
 body.dark label{color:#aaa}
-body.dark #dv{color:#ccc}
 </style></head><body>
 <div id="hdr">
   <h2>サブグラフ: <span id="ft"></span></h2>
@@ -2067,19 +2044,31 @@ body.dark #dv{color:#ccc}
     <input type="range" id="ds" min="1" max="5" value="2" style="width:80px" oninput="dep=+this.value;document.getElementById('dv').textContent=this.value;draw()">
     <span id="dv">2</span>
   </label>
-  <button class="btn" onclick="resetZ()">ズームリセット</button>
+  <button class="btn" onclick="resetView()">ズームリセット</button>
   <span style="font-size:11px;color:#aaa">ノードをクリックすると中心を変更</span>
 </div>
-<div id="ctnr"><svg id="sv"></svg></div>
+<div id="ctnr"><svg id="sv" xmlns="http://www.w3.org/2000/svg"></svg></div>
 <div id="tip"></div>
 <script>
 var _data = ${dataJson};
-var ALL = _data.tasks || [], fid = _data.focusId || 0, dep = _data.depth || 2, _z, _sv;
+var ALL = _data.tasks || [], fid = _data.focusId || 0, dep = _data.depth || 2;
+var _tx=0,_ty=0,_sc=1,_dragging=false,_dragStartX=0,_dragStartY=0,_dragTx=0,_dragTy=0;
 if (_data.isDark) document.body.classList.add('dark');
 document.title = "サブグラフ: " + (_data.title || fid);
 document.getElementById("ft").textContent = _data.title || fid;
 document.getElementById("ds").value = dep;
 document.getElementById("dv").textContent = dep;
+
+var NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  var el = document.createElementNS(NS, tag);
+  Object.entries(attrs||{}).forEach(function(kv){ el.setAttribute(kv[0], kv[1]); });
+  return el;
+}
+function svgText(el, x, y, text, attrs) {
+  var t = svgEl("text", Object.assign({x:x,y:y,"text-anchor":"middle","font-family":"Segoe UI,Meiryo,sans-serif"}, attrs||{}));
+  t.textContent = text; el.appendChild(t); return t;
+}
 
 function buildGraph(tasks) {
   var ns = tasks.map(function(t){return Object.assign({},t);}),
@@ -2101,73 +2090,149 @@ function layout(nodes,edges) {
   var dp={},q=nodes.filter(function(n){return ind[n.id]===0;}).map(function(n){return n.id;});
   q.forEach(function(id){dp[id]=0;});
   var vis=new Set(q);
-  while(q.length){var id=q.shift();succ[id].forEach(function(sid){dp[sid]=Math.max(dp[sid]||0,(dp[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});}
+  while(q.length){
+    var id=q.shift();
+    succ[id].forEach(function(sid){dp[sid]=Math.max(dp[sid]||0,(dp[id]||0)+1);ind[sid]--;if(ind[sid]===0&&!vis.has(sid)){q.push(sid);vis.add(sid);}});
+  }
   var bd={},NW=190,NH=96,CG=60,RG=14;
   nodes.forEach(function(n){var d=dp[n.id]||0;if(!bd[d])bd[d]=[];bd[d].push(n);});
   var ch={};Object.keys(bd).forEach(function(d){ch[d]=bd[d].length*(NH+RG)-RG;});
-  var mh=Math.max.apply(null,Object.values(ch));
-  nodes.forEach(function(n){var d=dp[n.id]||0,col=bd[d],idx=col.indexOf(n);n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-ch[d])/2;});
+  var vals=Object.values(ch);
+  var mh=vals.length?Math.max.apply(null,vals):0;
+  nodes.forEach(function(n){
+    var d=dp[n.id]||0,col=bd[d],idx=col.indexOf(n);
+    n.gx=d*(NW+CG);n.gy=idx*(NH+RG)+(mh-(ch[d]||0))/2;
+  });
 }
 
 function draw() {
   var ct=document.getElementById("ctnr");
   var cW=ct.clientWidth||window.innerWidth||900, cH=ct.clientHeight||window.innerHeight||600;
   var NW=190,NH=96;
+  var svg=document.getElementById("sv");
+  svg.setAttribute("width",cW);svg.setAttribute("height",cH);
+  while(svg.firstChild)svg.removeChild(svg.firstChild);
+
   var reg=ALL.filter(function(t){return t.active!=="いいえ";});
   var sel=new Set([fid]),ae=[];
   reg.forEach(function(t){if(!t.pred)return;t.pred.split(",").map(function(s){return parseInt(s.trim());}).forEach(function(p){ae.push({source:p,target:t.id});});});
   for(var i=0;i<dep;i++){var add=new Set();ae.forEach(function(e){if(sel.has(e.source))add.add(e.target);if(sel.has(e.target))add.add(e.source);});add.forEach(function(id){sel.add(id);});}
   var sub=reg.filter(function(t){return sel.has(t.id);});
-  var svg=d3.select("#sv").attr("width",cW).attr("height",cH);
-  svg.selectAll("*").remove();
-  if(!sub.length){svg.append("text").attr("x",cW/2).attr("y",cH/2).attr("text-anchor","middle").attr("font-size","14px").attr("fill","#888").text("関連タスクが見つかりません（深さを増やしてください）");return;}
-  var gr=buildGraph(sub);layout(gr.nodes,gr.edges);
-  var defs=svg.append("defs");
+
+  if(!sub.length){
+    var t=svgEl("text",{x:cW/2,y:cH/2,"text-anchor":"middle","font-size":"14","fill":"#888","font-family":"Segoe UI,sans-serif"});
+    t.textContent="関連タスクが見つかりません（深さを増やしてください）";svg.appendChild(t);return;
+  }
+
+  // defs (arrows)
+  var defs=svgEl("defs");
   ["normal","cp"].forEach(function(type){
-    defs.append("marker").attr("id","arr-"+type).attr("viewBox","0 -5 10 10").attr("refX",10).attr("refY",0).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto")
-      .append("path").attr("d","M0,-5L10,0L0,5").attr("fill",type==="cp"?"#e53935":"#4472C4");
+    var mk=svgEl("marker",{id:"arr-"+type,viewBox:"0 -5 10 10",refX:10,refY:0,markerWidth:6,markerHeight:6,orient:"auto"});
+    var path=svgEl("path",{d:"M0,-5L10,0L0,5",fill:type==="cp"?"#e53935":"#4472C4"});
+    mk.appendChild(path);defs.appendChild(mk);
   });
-  var g=svg.append("g");
+  svg.appendChild(defs);
+
+  var gr=buildGraph(sub);layout(gr.nodes,gr.edges);
+
+  // g group with transform
+  var g=svgEl("g");
+  svg.appendChild(g);
+
   var nm={};gr.nodes.forEach(function(n){nm[n.id]=n;});
+
+  // edges
   gr.edges.forEach(function(e){
     var s=nm[e.source],t=nm[e.target];if(!s||!t)return;
     var cp=s.critical==="はい"&&t.critical==="はい";
     var sx=s.gx+NW+20,sy=s.gy+NH/2+20,tx=t.gx+20,ty=t.gy+NH/2+20,cx=(sx+tx)/2;
-    g.append("path").attr("d","M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty)
-      .attr("fill","none").attr("stroke",cp?"#e53935":"#4472C4").attr("stroke-width",cp?2.5:1.5)
-      .attr("marker-end","url(#arr-"+(cp?"cp":"normal")+")").attr("opacity",.8);
+    var path=svgEl("path",{d:"M"+sx+","+sy+" C"+cx+","+sy+" "+cx+","+ty+" "+tx+","+ty,
+      fill:"none",stroke:cp?"#e53935":"#4472C4","stroke-width":cp?"2.5":"1.5",
+      "marker-end":"url(#arr-"+(cp?"cp":"normal")+")",opacity:"0.8"});
+    g.appendChild(path);
   });
+
+  // nodes
   gr.nodes.forEach(function(n){
     var ic=n.status==="Close";
     var bg=ic?"#D9D9D9":({"On-going":"#E2EFDA","Delay":"#FFE0E0","nActive":"#F2F2F2","Disable":"#F2F2F2"}[n.status]||"#fff");
     var bd=ic?"#AAAAAA":({"On-going":"#00B050","Delay":"#FF0000","nActive":"#808080","Disable":"#BFBFBF"}[n.status]||"#ccc");
     var icp=!ic&&n.critical==="はい",ifo=n.id===fid,tc=ic?"#888":"#222";
-    var ng=g.append("g").attr("transform","translate("+(n.gx+20)+","+(n.gy+20)+")").style("cursor","pointer")
-      .on("click",function(){fid=n.id;var tk=ALL.find(function(x){return x.id===n.id;});document.getElementById("ft").textContent=tk?tk.name:n.id;draw();})
-      .on("mouseover",function(e){var tip=document.getElementById("tip");tip.style.display="block";tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");})
-      .on("mouseout",function(){document.getElementById("tip").style.display="none";});
-    ng.append("rect").attr("width",NW).attr("height",NH).attr("rx",5).attr("fill",bg).attr("stroke",ifo?"#ff9800":icp?"#e53935":bd).attr("stroke-width",ifo?3:icp?2.5:1.5);
-    if(icp&&!ic){ng.append("rect").attr("x",NW-28).attr("y",0).attr("width",22).attr("height",14).attr("rx",2).attr("fill","#e53935");ng.append("text").attr("x",NW-17).attr("y",10).attr("text-anchor","middle").attr("font-size","9px").attr("fill","#fff").attr("font-weight","700").text("CP");}
-    ng.append("text").attr("x",8).attr("y",13).attr("font-size","9px").attr("fill",ic?"#aaa":"#888").text(n.wbs);
+    var ox=n.gx+20,oy=n.gy+20;
+    var ng=svgEl("g",{transform:"translate("+ox+","+oy+")",cursor:"pointer"});
+    g.appendChild(ng);
+
+    var rect=svgEl("rect",{width:NW,height:NH,rx:5,fill:bg,stroke:ifo?"#ff9800":icp?"#e53935":bd,"stroke-width":ifo?"3":icp?"2.5":"1.5"});
+    ng.appendChild(rect);
+
+    if(icp&&!ic){
+      var cpbg=svgEl("rect",{x:NW-28,y:0,width:22,height:14,rx:2,fill:"#e53935"});ng.appendChild(cpbg);
+      var cpt=svgEl("text",{x:NW-17,y:10,"text-anchor":"middle","font-size":"9","fill":"#fff","font-weight":"700","font-family":"Segoe UI,sans-serif"});cpt.textContent="CP";ng.appendChild(cpt);
+    }
+
+    var wt=svgEl("text",{x:8,y:13,"text-anchor":"start","font-size":"9","fill":ic?"#aaa":"#888","font-family":"Segoe UI,sans-serif"});wt.textContent=n.wbs||"";ng.appendChild(wt);
+
     var l1=n.name.slice(0,22),l2=n.name.length>22?n.name.slice(22,42)+(n.name.length>42?"…":""):"";
-    ng.append("text").attr("x",NW/2).attr("y",l2?28:34).attr("text-anchor","middle").attr("font-size","11px").attr("font-weight","600").attr("fill",tc).text(l1);
-    if(l2)ng.append("text").attr("x",NW/2).attr("y",42).attr("text-anchor","middle").attr("font-size","11px").attr("fill",tc).text(l2);
-    ng.append("line").attr("x1",6).attr("x2",NW-6).attr("y1",58).attr("y2",58).attr("stroke",ic?"#bbb":"#ddd").attr("stroke-width",1);
-    ng.append("text").attr("x",NW/2).attr("y",71).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#555").text(n.status+" | "+n.pct+"%");
+    var nt=svgEl("text",{x:NW/2,y:l2?28:34,"text-anchor":"middle","font-size":"11","font-weight":"600","fill":tc,"font-family":"Segoe UI,sans-serif"});nt.textContent=l1;ng.appendChild(nt);
+    if(l2){var nt2=svgEl("text",{x:NW/2,y:42,"text-anchor":"middle","font-size":"11","fill":tc,"font-family":"Segoe UI,sans-serif"});nt2.textContent=l2;ng.appendChild(nt2);}
+
+    var sep=svgEl("line",{x1:6,x2:NW-6,y1:58,y2:58,stroke:ic?"#bbb":"#ddd","stroke-width":"1"});ng.appendChild(sep);
+
+    var st=svgEl("text",{x:NW/2,y:71,"text-anchor":"middle","font-size":"10","fill":ic?"#aaa":"#555","font-family":"Segoe UI,sans-serif"});st.textContent=n.status+" | "+n.pct+"%";ng.appendChild(st);
     var res=(n.resource||"—").length>22?(n.resource||"—").slice(0,21)+"…":(n.resource||"—");
-    ng.append("text").attr("x",NW/2).attr("y",87).attr("text-anchor","middle").attr("font-size","10px").attr("fill",ic?"#aaa":"#4472C4").text("担当: "+res);
+    var rt=svgEl("text",{x:NW/2,y:87,"text-anchor":"middle","font-size":"10","fill":ic?"#aaa":"#4472C4","font-family":"Segoe UI,sans-serif"});rt.textContent="担当: "+res;ng.appendChild(rt);
+
+    ng.addEventListener("click",function(){
+      fid=n.id;var tk=ALL.find(function(x){return x.id===n.id;});
+      document.getElementById("ft").textContent=tk?tk.name:n.id;draw();
+    });
+    ng.addEventListener("mouseover",function(e){
+      var tip=document.getElementById("tip");tip.style.display="block";
+      tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+8)+"px";
+      tip.innerHTML="<b>"+n.name+"</b><br>担当: "+(n.resource||"—")+"<br>ステータス: "+n.status+"<br>達成率: "+n.pct+"%"+(icp?"<br>🔴 CP":"");
+    });
+    ng.addEventListener("mouseout",function(){document.getElementById("tip").style.display="none";});
   });
-  var z=d3.zoom().scaleExtent([0.1,4]).on("zoom",function(ev){g.attr("transform",ev.transform);});
-  svg.call(z);_z=z;_sv=svg;
-  if(gr.nodes.length){
-    var mx=Math.max.apply(null,gr.nodes.map(function(n){return n.gx;}))+NW+60;
-    var my=Math.max.apply(null,gr.nodes.map(function(n){return n.gy;}))+NH+60;
-    var sc=Math.min(1,(cW-40)/mx,(cH-40)/my);
-    svg.call(z.transform,d3.zoomIdentity.translate(20,20).scale(sc));
-  }
+
+  // initial fit
+  var mx=0,my=0;
+  gr.nodes.forEach(function(n){mx=Math.max(mx,n.gx);my=Math.max(my,n.gy);});
+  mx+=NW+60;my+=NH+60;
+  var sc=Math.min(1,(cW-40)/mx,(cH-40)/my);
+  _sc=sc;_tx=20;_ty=20;
+  applyTransform(g);
+  setupPanZoom(svg,g);
 }
 
-function resetZ(){if(_sv&&_z)_sv.transition().duration(400).call(_z.transform,d3.zoomIdentity.translate(20,20));}
+function applyTransform(g){
+  g.setAttribute("transform","translate("+_tx+","+_ty+") scale("+_sc+")");
+}
+
+function setupPanZoom(svg,g){
+  svg.addEventListener("mousedown",function(e){
+    if(e.button!==0)return;
+    _dragging=true;_dragStartX=e.clientX;_dragStartY=e.clientY;_dragTx=_tx;_dragTy=_ty;
+    svg.style.cursor="grabbing";e.preventDefault();
+  });
+  svg.addEventListener("mousemove",function(e){
+    if(!_dragging)return;
+    _tx=_dragTx+(e.clientX-_dragStartX);_ty=_dragTy+(e.clientY-_dragStartY);
+    applyTransform(g);
+  });
+  svg.addEventListener("mouseup",function(){_dragging=false;svg.style.cursor="grab";});
+  svg.addEventListener("mouseleave",function(){_dragging=false;svg.style.cursor="grab";});
+  svg.addEventListener("wheel",function(e){
+    e.preventDefault();
+    var factor=e.deltaY<0?1.12:0.89;
+    var rect=svg.getBoundingClientRect();
+    var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    _tx=mx-(mx-_tx)*factor;_ty=my-(my-_ty)*factor;
+    _sc=Math.max(0.1,Math.min(4,_sc*factor));
+    applyTransform(g);
+  },{passive:false});
+}
+
+function resetView(){_tx=20;_ty=20;_sc=1;var g=document.querySelector("#sv > g");if(g)applyTransform(g);}
 window.addEventListener("resize",draw);
 draw();
 <\/script></body></html>`;
@@ -3133,6 +3198,7 @@ function _applyColOrderByOrig(tableEl, orderByOrig) {
 
 // --- Gantt-specific enhance (fixed columns only) ---
 function enhanceGanttTable(wrap) {
+  localStorage.removeItem('pj_column_widths_gantt');
   const fixedTbl = document.getElementById('gantt-fixed-tbl');
   const calTbl   = document.getElementById('gantt-cal-tbl');
   if (!fixedTbl || !calTbl) return;
