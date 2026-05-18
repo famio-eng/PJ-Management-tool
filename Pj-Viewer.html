@@ -1096,6 +1096,13 @@ document.getElementById('excel-file-input').addEventListener('change', function(
     // --- フェーズ5: ステータス計算・描画 ---
     try {
       computeAllStatuses();
+      // Persist imported project so project selection modal appears on next startup
+      const importedProject = { name: state.projectName, tasks: state.tasks };
+      const existing = loadProjectsFromStorage() || [];
+      const idx = existing.findIndex(p => p.name === state.projectName);
+      if (idx >= 0) existing[idx] = importedProject; else existing.push(importedProject);
+      _allProjects = existing;
+      saveProjectsToStorage(existing);
       renderScreen();
       console.log('[Excel import] 完了。タスク数:', state.tasks.length);
     } catch(err) {
@@ -3851,6 +3858,7 @@ function applyAliasToTasks() {
 let _allProjects = [];  // [{name, tasks}]
 
 async function loadDataJson() {
+  if (location.protocol === 'file:') return null; // file:// cannot fetch cross-origin
   try {
     const res = await fetch('./data.json', { cache: 'no-cache' });
     if (!res.ok) throw new Error('not found');
