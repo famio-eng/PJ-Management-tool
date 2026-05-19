@@ -3153,8 +3153,9 @@ function renderDept() {
       case 'pct':    return pctBar(t.pct);
       case 'start':  return formatDate(t.start);
       case 'end':    return formatDate(t.end);
-      case 'status': return statusBadge(t.status);
-      default:       return '';
+      case 'status':   return statusBadge(t.status);
+      case 'resource': return `<span style="font-size:10px;color:#888">${t.resource||''}</span>`;
+      default:         return '';
     }
   }
 
@@ -3852,15 +3853,17 @@ const TASK_FIELD_MAP = {
 };
 
 // Dept view column definitions — single source of truth for settings modal + renderDept
-// key: task object field, label: UI display name, dateStyle: whether to apply date cell style
+// key: task object field, label: UI display name (must exactly match renderDept <th> text)
+// defaultOn: initial checked state, dateStyle: apply white-space:nowrap;font-size:11px
 const DEPT_COL_DEFS = [
-  { key: 'wbs',    label: 'WBS',       defaultOn: false },
-  { key: 'bstart', label: '基準開始',  defaultOn: true,  dateStyle: true },
-  { key: 'bend',   label: '基準終了',  defaultOn: true,  dateStyle: true },
-  { key: 'pct',    label: '達成率',    defaultOn: true },
-  { key: 'start',  label: '予測開始',  defaultOn: true,  dateStyle: true },
-  { key: 'end',    label: '予測終了',  defaultOn: true,  dateStyle: true },
-  { key: 'status', label: 'ステータス', defaultOn: true },
+  { key: 'wbs',      label: 'WBS',       defaultOn: false },
+  { key: 'bstart',   label: '基準開始',  defaultOn: true,  dateStyle: true },
+  { key: 'bend',     label: '基準終了',  defaultOn: true,  dateStyle: true },
+  { key: 'pct',      label: '達成率',    defaultOn: true },
+  { key: 'start',    label: '予測開始',  defaultOn: true,  dateStyle: true },
+  { key: 'end',      label: '予測終了',  defaultOn: true,  dateStyle: true },
+  { key: 'status',   label: 'ステータス', defaultOn: true },
+  { key: 'resource', label: '担当部門',  defaultOn: false },  // task.resource (担当部門/リソース名)
 ];
 
 // Per-view: all columns that can be toggled (using display labels)
