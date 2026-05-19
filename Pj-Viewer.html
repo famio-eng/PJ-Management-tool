@@ -3871,7 +3871,15 @@ async function loadDataJson() {
 function loadProjectsFromStorage() {
   try {
     const s = localStorage.getItem('pj_projects');
-    if (s) return JSON.parse(s);
+    if (!s) return null;
+    const projects = JSON.parse(s);
+    const DATE_KEYS = ['bstart','bend','start','end','astart','aend'];
+    projects.forEach(proj =>
+      (proj.tasks || []).forEach(t =>
+        DATE_KEYS.forEach(k => { if (t[k]) t[k] = new Date(t[k]); })
+      )
+    );
+    return projects;
   } catch(_) {}
   return null;
 }
@@ -4160,11 +4168,7 @@ async function init() {
       }
 
       initTheme(); updateSidebarInfo();
-      if (projects.length === 1) {
-        selectProject(0);
-      } else {
-        showProjectSelectModal(projects);
-      }
+      showProjectSelectModal(projects);
       return;
     }
   }
@@ -4173,11 +4177,7 @@ async function init() {
   const savedProjects = loadProjectsFromStorage();
   if (savedProjects && savedProjects.length) {
     _allProjects = savedProjects;
-    if (savedProjects.length === 1) {
-      selectProject(0);
-    } else {
-      showProjectSelectModal(savedProjects);
-    }
+    showProjectSelectModal(savedProjects);
     return;
   }
 
