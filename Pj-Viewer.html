@@ -3106,7 +3106,6 @@ function renderDept() {
   const dept = state.deptTab;
   const weekKey = getWeekKey(state.reportDate);
   const tasks = state.tasks.filter(t => !t.isSummary && (t.resource || '').split(',').map(s => s.trim()).includes(dept));
-  const allTasks = state.tasks;
 
   // Past 3 weeks
   const pastWeeks = [];
@@ -3119,6 +3118,17 @@ function renderDept() {
   const tabsHtml = DEPTS.map(d =>
     `<div class="dept-tab${d === dept ? ' active' : ''}" onclick="setDeptTab('${d}')">${d}</div>`
   ).join('');
+
+  // Column visibility (pj_visible_columns_dept)
+  const deptCols  = getViewColumns('dept');
+  const showWBS    = deptCols.includes('WBS');
+  const showBstart = deptCols.includes('基準開始');
+  const showBend   = deptCols.includes('基準終了');
+  const showPct    = deptCols.includes('達成率');
+  const showStart  = deptCols.includes('予測開始');
+  const showEnd    = deptCols.includes('予測終了');
+  const showStatus = deptCols.includes('ステータス');
+  const hd = v => v ? '' : 'display:none';
 
   const rows = tasks.map(t => {
     const ck = `${t.id}_${weekKey}`;
@@ -3134,14 +3144,14 @@ function renderDept() {
     }).join('');
 
     return `<tr>
-      <td style="font-size:10px;color:#888">${t.wbs}</td>
+      <td style="font-size:10px;color:#888;${hd(showWBS)}">${t.wbs}</td>
       <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.bstart)}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.bend)}</td>
-      <td>${pctBar(t.pct)}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.start)}</td>
-      <td style="white-space:nowrap;font-size:11px">${formatDate(t.end)}</td>
-      <td>${statusBadge(t.status)}</td>
+      <td style="white-space:nowrap;font-size:11px;${hd(showBstart)}">${formatDate(t.bstart)}</td>
+      <td style="white-space:nowrap;font-size:11px;${hd(showBend)}">${formatDate(t.bend)}</td>
+      <td style="${hd(showPct)}">${pctBar(t.pct)}</td>
+      <td style="white-space:nowrap;font-size:11px;${hd(showStart)}">${formatDate(t.start)}</td>
+      <td style="white-space:nowrap;font-size:11px;${hd(showEnd)}">${formatDate(t.end)}</td>
+      <td style="${hd(showStatus)}">${statusBadge(t.status)}</td>
       <td>
         <textarea class="comment-input${saved?' saved':''}" id="dc_${t.id}"
           placeholder="進捗コメントを入力...">${c.comment||''}</textarea>
@@ -3166,8 +3176,11 @@ function renderDept() {
         <table>
           <thead>
             <tr>
-              <th>WBS</th><th>タスク名</th><th>基準開始</th><th>基準終了</th>
-              <th>達成率</th><th>予測開始</th><th>予測終了</th><th>ステータス</th>
+              <th style="${hd(showWBS)}">WBS</th><th>タスク名</th>
+              <th style="${hd(showBstart)}">基準開始</th><th style="${hd(showBend)}">基準終了</th>
+              <th style="${hd(showPct)}">達成率</th>
+              <th style="${hd(showStart)}">予測開始</th><th style="${hd(showEnd)}">予測終了</th>
+              <th style="${hd(showStatus)}">ステータス</th>
               <th>進捗コメント</th><th>担当者名</th>
               ${pastWeeks.map(wk => `<th style="background:#f0f0f0;font-size:10px">${wk}<br>（過去）</th>`).join('')}
             </tr>
@@ -3808,7 +3821,7 @@ const VIEW_CONTROLLABLE_COLS = {
   timeline: ['基準開始日','基準終了日','実績開始日','実績終了日','リソース名','状況'],
   gantt:    ['ID','WBS番号','担当部門','達成率','ステータス','NW図','基準開始日','基準終了日','実績開始日','実績終了日'],
   meeting:  ['状況','達成率','開始日','終了日'],
-  dept:     ['状況','達成率','開始日','終了日']
+  dept:     ['WBS','基準開始','基準終了','達成率','予測開始','予測終了','ステータス']
 };
 
 // Per-view default ON columns
@@ -3816,7 +3829,7 @@ const VIEW_DEFAULT_COLS = {
   timeline: ['基準開始日','基準終了日','リソース名','状況'],
   gantt:    ['ID','WBS番号','担当部門','達成率','ステータス','NW図','基準開始日','基準終了日','実績開始日','実績終了日'],
   meeting:  ['状況','達成率','開始日','終了日'],
-  dept:     ['状況','達成率','開始日','終了日']
+  dept:     ['基準開始','基準終了','達成率','予測開始','予測終了','ステータス']
 };
 
 function getViewColumns(view) {
