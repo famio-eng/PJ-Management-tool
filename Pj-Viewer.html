@@ -1517,6 +1517,10 @@ function renderTimeline() {
   initTLSelection();
   const zoom = state.tlZoom || 65;
 
+  let taskListHTML;
+  try { taskListHTML = buildTLTaskListHTML(); }
+  catch(e) { console.error('buildTLTaskListHTML error:', e); taskListHTML = `<p style="padding:12px;color:#e53935">表示エラー: ${e.message}</p>`; }
+
   const deptLegend = Object.entries(DEPT_COLORS).map(([dept, color]) =>
     `<span style="display:inline-flex;align-items:center;gap:3px;margin:0 8px 4px 0;white-space:nowrap">
       <span style="width:13px;height:8px;background:${color};border-radius:2px;display:inline-block;opacity:.85;flex-shrink:0"></span>${dept}</span>`
@@ -1551,7 +1555,7 @@ function renderTimeline() {
             <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
           </div>
           <div id="tl-task-list" style="overflow-y:auto">
-            ${buildTLTaskListHTML()}
+            ${taskListHTML}
           </div>
         </div>
       </div>
@@ -3771,7 +3775,10 @@ const DEFAULT_VISIBLE_COLUMNS = ['タスク名','リソース名','開始日','�
 function getVisibleColumns() {
   try {
     const s = localStorage.getItem('pj_visible_columns');
-    if (s) return JSON.parse(s);
+    if (s) {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch(_) {}
   return DEFAULT_VISIBLE_COLUMNS.slice();
 }
