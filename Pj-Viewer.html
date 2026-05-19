@@ -82,6 +82,12 @@ tr:hover td{background:#fafbff}
 #tl-outer{display:flex;overflow:hidden}
 #tl-labels{flex:0 0 188px;overflow:hidden;position:relative;z-index:5}
 #tl-chart{flex:1;overflow-x:auto;min-width:0}
+#tl-split-container{display:flex;flex-direction:column;overflow:hidden}
+#tl-upper-pane{overflow-y:auto;overflow-x:hidden;min-height:60px}
+#tl-vresize-handle{height:6px;background:#e0e0e0;cursor:row-resize;flex-shrink:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc}
+#tl-vresize-handle:hover{background:#b0c4de}
+#tl-lower-pane{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:60px}
+body.dark #tl-vresize-handle{background:#2a3550;border-color:#3a4560}
 .tl-label-bg{fill:#fff}
 body.dark .tl-label-bg{fill:#16213e}
 .tl-label-sep{stroke:#ddd;stroke-width:1}
@@ -599,6 +605,7 @@ const state = {
   collapsedRows: new Set(),
   tlSelectedIds: new Set(),
   tlExpandedIds: new Set(),
+  tlListCollapsed: new Set(),
 };
 
 // =====================================================================
@@ -805,6 +812,8 @@ function loadStorage() {
     // B-5: restore gantt collapsed state
     const _gc = JSON.parse(localStorage.getItem('pj_gantt_collapsed') || 'null');
     if (_gc) state.collapsedRows = new Set(_gc);
+    const _tlListC = JSON.parse(localStorage.getItem('pj_tl_list_collapsed') || 'null');
+    if (_tlListC) state.tlListCollapsed = new Set(_tlListC);
     // B-1: restore NW layout mode
     const _nm = localStorage.getItem('pj_nw_mode');
     if (_nm) state.nwLayoutMode = _nm;
@@ -907,6 +916,12 @@ function calcStatus(task, allTasks, reportDate) {
 function computeAllStatuses() {
   state.tasks.forEach(t => {
     t.status = calcStatus(t, state.tasks, state.reportDate);
+  });
+  // Ensure isSummary is set for any task that has children (multi-level nested summaries)
+  state.tasks.forEach(t => {
+    if (!t.isSummary && t.wbs) {
+      t.isSummary = state.tasks.some(c => c.wbs && c.wbs.startsWith(t.wbs + '.'));
+    }
   });
 }
 
@@ -1368,7 +1383,15 @@ function buildTLTaskListHTML() {
   if (!state.tasks.length) return '<p style="padding:12px;color:#888">タスクなし</p>';
   const activeTasks = state.tasks.filter(t => t.active !== 'いいえ');
   const allChecked = activeTasks.length > 0 && activeTasks.every(t => state.tlSelectedIds.has(t.id));
-  const someChecked = activeTasks.some(t => state.tlSelectedIds.has(t.id));
+
+  function isListVisible(t) {
+    if (!t.wbs) return true;
+    for (const collId of state.tlListCollapsed) {
+      const collTask = state.tasks.find(c => c.id === collId);
+      if (collTask && collTask.wbs && t.wbs.startsWith(collTask.wbs + '.')) return false;
+    }
+    return true;
+  }
 
   let html = `<table style="width:100%;border-collapse:collapse;font-size:11px">
     <thead><tr style="background:#f0f4fa;position:sticky;top:0;z-index:1">
@@ -1383,17 +1406,22 @@ function buildTLTaskListHTML() {
     </tr></thead><tbody>`;
 
   activeTasks.forEach(t => {
+    if (!isListVisible(t)) return;
     const checked = state.tlSelectedIds.has(t.id);
     const indent = (t.level - 1) * 14;
     const bold = t.level <= 2;
     const rowCls = t.level === 1 ? 'tl-list-l1' : t.level === 2 ? 'tl-list-l2' : '';
     const isCritical = t.critical === 'はい';
+    const isCollapsed = state.tlListCollapsed.has(t.id);
     const name = (t.name || '').length > 32 ? (t.name || '').slice(0, 31) + '…' : (t.name || '');
-    html += `<tr class="${rowCls}" style="border-bottom:1px solid #f0f0f0">
+    const toggleIcon = t.isSummary
+      ? `<span style="cursor:pointer;color:#4472C4;margin-right:2px;font-size:10px;user-select:none" onclick="toggleTLListRow(${t.id})">${isCollapsed ? '▶' : '▼'}</span>`
+      : `<span style="display:inline-block;width:14px"></span>`;
+    html += `<tr class="${rowCls}" data-tid="${t.id}" style="border-bottom:1px solid #f0f0f0">
       <td style="text-align:center;padding:3px 6px">
         <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
       </td>
-      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${isCritical ? '🔴 ' : ''}${name}</td>
+      <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${toggleIcon}${isCritical ? '🔴 ' : ''}${name}</td>
       <td style="padding:3px 6px">${formatDate(t.bstart, '')}</td>
       <td style="padding:3px 6px">${formatDate(t.bend, '')}</td>
       <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
@@ -1427,6 +1455,25 @@ window.toggleAllTLTasks = function(checked) {
   saveStorage();
   document.querySelectorAll('#tl-task-list input[data-tid]').forEach(cb => { cb.checked = checked; });
   drawTimeline();
+};
+
+window.toggleTLListRow = function(id) {
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  if (state.tlListCollapsed.has(id)) {
+    state.tlListCollapsed.delete(id);
+  } else {
+    state.tlListCollapsed.add(id);
+    // Reset child summaries to expanded when parent is collapsed
+    state.tasks.forEach(t => {
+      if (t.id !== id && t.isSummary && t.wbs && task.wbs && t.wbs.startsWith(task.wbs + '.')) {
+        state.tlListCollapsed.delete(t.id);
+      }
+    });
+  }
+  try { localStorage.setItem('pj_tl_list_collapsed', JSON.stringify([...state.tlListCollapsed])); } catch(_) {}
+  const container = document.getElementById('tl-task-list');
+  if (container) container.innerHTML = buildTLTaskListHTML();
 };
 
 window.toggleTLPanel = function() {
@@ -1489,19 +1536,23 @@ function renderTimeline() {
           <span style="width:14px;height:10px;border:2px solid #e53935;display:inline-block;border-radius:2px"></span>クリティカルパス</span>
       </div>
     </div>
-    <div class="section" style="padding:12px;margin-bottom:10px">
-      <div id="tl-outer">
-        <div id="tl-labels"></div>
-        <div id="tl-chart"></div>
+    <div id="tl-split-container">
+      <div id="tl-upper-pane">
+        <div class="section" style="padding:0;overflow:hidden;border:none;box-shadow:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid #eee;background:var(--bg)">
+            <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
+          </div>
+          <div id="tl-task-list" style="overflow-y:auto">
+            ${buildTLTaskListHTML()}
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="section" style="padding:0;overflow:hidden">
-      <div id="tl-panel-hdr" style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;border-bottom:1px solid #eee" onclick="toggleTLPanel()">
-        <span style="font-weight:600;font-size:12px">📋 タスク一覧（タイムライン表示選択）</span>
-        <span id="tl-panel-arrow">▼</span>
-      </div>
-      <div id="tl-task-list" style="max-height:280px;overflow-y:auto">
-        ${buildTLTaskListHTML()}
+      <div id="tl-vresize-handle"></div>
+      <div id="tl-lower-pane">
+        <div id="tl-outer" style="height:100%;flex:1">
+          <div id="tl-labels"></div>
+          <div id="tl-chart"></div>
+        </div>
       </div>
     </div>`;
 
@@ -1511,6 +1562,7 @@ function renderTimeline() {
   requestAnimationFrame(() => {
     const tlTbl = document.querySelector('#tl-task-list table');
     if (tlTbl) applyColResize(tlTbl, 'timeline');
+    initTLVerticalSplit();
     initTimelineResizeObserver();
     initTimelineWheelSync();
   });
@@ -2867,12 +2919,6 @@ function drawGantt() {
   enhanceGanttTable(wrap);
 }
 
-window.toggleGanttRow = function(id) {
-  if (state.collapsedRows.has(id)) state.collapsedRows.delete(id);
-  else state.collapsedRows.add(id);
-  drawGantt();
-};
-
 // =====================================================================
 // GANTT: SUBGRAPH WINDOW (4-4) — reuses showNWSubPanel
 // =====================================================================
@@ -3744,11 +3790,11 @@ function showToast(msg, duration) {
 // =====================================================================
 // SETTINGS MODAL
 // =====================================================================
-function openSettingsModal() {
-  renderVisibleColumnsTab();
-  renderAliasTab();
+window.openSettingsModal = function() {
+  try { renderVisibleColumnsTab(); } catch(e) { console.error('renderVisibleColumnsTab:', e); }
+  try { renderAliasTab(); } catch(e) { console.error('renderAliasTab:', e); }
   openModal('settings-modal');
-}
+};
 
 function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -4039,16 +4085,67 @@ function applyColSort(tableEl) {
 // TIMELINE ENHANCEMENTS (A-7, A-8, A-9)
 // =====================================================================
 
+// B-8: Vertical split pane for timeline view
+function initTLVerticalSplit() {
+  const handle = document.getElementById('tl-vresize-handle');
+  const upper = document.getElementById('tl-upper-pane');
+  const lower = document.getElementById('tl-lower-pane');
+  const container = document.getElementById('tl-split-container');
+  if (!handle || !upper || !lower || !container) return;
+
+  const savedRatio = parseFloat(localStorage.getItem('pj_timeline_split_ratio') || '0.45');
+  function applyRatio(r) {
+    const h = container.offsetHeight;
+    upper.style.height = Math.round(h * r) + 'px';
+    upper.style.flex = 'none';
+  }
+  // Apply after layout is done
+  requestAnimationFrame(() => applyRatio(savedRatio));
+
+  let dragging = false, startY = 0, startUpperH = 0;
+  handle.addEventListener('mousedown', e => {
+    dragging = true;
+    startY = e.clientY;
+    startUpperH = upper.offsetHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const containerH = container.offsetHeight;
+    const dy = e.clientY - startY;
+    const newH = Math.max(60, Math.min(containerH - 60, startUpperH + dy));
+    const ratio = newH / containerH;
+    upper.style.height = newH + 'px';
+    try { localStorage.setItem('pj_timeline_split_ratio', ratio.toString()); } catch(_) {}
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) {
+      dragging = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+}
+
 // A-9: ResizeObserver for timeline container height
 function initTimelineResizeObserver() {
-  const nav = document.getElementById('sidebar');
   const topbar = document.getElementById('topbar');
+  const splitContainer = document.getElementById('tl-split-container');
   const content = document.getElementById('content');
   if (!content) return;
 
   function updateTLHeight() {
     const topH = topbar ? topbar.offsetHeight : 48;
     content.style.height = `calc(100vh - ${topH}px)`;
+    content.style.overflow = 'hidden';
+    if (splitContainer) {
+      // tl-split-container takes remaining space below the legend section
+      const legendSection = content.querySelector('.section');
+      const legendH = legendSection ? legendSection.offsetHeight + 10 : 120;
+      splitContainer.style.height = `calc(100vh - ${topH + legendH}px)`;
+    }
   }
 
   if (window.ResizeObserver) {
