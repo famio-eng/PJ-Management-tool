@@ -2863,8 +2863,15 @@ function drawGantt() {
   const gLeft  = document.getElementById('gantt-left');
   const splitOuter = wrap.querySelector('.gantt-split-outer');
 
-  // Vertical scroll sync
-  if (gRight && gLeft) gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+  // Vertical scroll sync: right→left (existing), left wheel→both
+  if (gRight && gLeft) {
+    gRight.addEventListener('scroll', () => { gLeft.scrollTop = gRight.scrollTop; });
+    gLeft.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      gRight.scrollTop += e.deltaY;
+      gLeft.scrollTop  += e.deltaY;
+    }, { passive: false });
+  }
 
   // ── Left panel initial width ──
   requestAnimationFrame(() => {
