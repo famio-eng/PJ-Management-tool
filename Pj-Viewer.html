@@ -295,6 +295,9 @@ body.dark .tl-row-even { fill: #1e2a45; opacity: .5; }
 body.dark .tl-row-odd { fill: #16213e; opacity: .5; }
 .tl-task-text { fill: #333; }
 body.dark .tl-task-text { fill: #d0d8e8; }
+/* Scroll-following bar labels — white halo for readability on any bar color */
+.tl-lbl-text { stroke: rgba(255,255,255,0.9); stroke-width: 3px; paint-order: stroke fill; }
+body.dark .tl-lbl-text { stroke: rgba(22,33,62,0.9); }
 /* Task list panel row backgrounds (dark mode) */
 #tl-task-list tr.tl-list-l1 { background: #f0f4fa; }
 #tl-task-list tr.tl-list-l2 { background: #f8faff; }
@@ -1691,23 +1694,26 @@ function drawTimeline() {
     rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', chartW).attr('height', rowH)
       .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
 
-    // Task name label — same SVG as bars, so scrolls together horizontally
-    {
-      const labelW = 160;
-      rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', labelW).attr('height', rowH)
-        .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
-      const indent = row.level === 1 ? 4 : row.level === 2 ? 14 : 22;
-      const labelText = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
-      const icon   = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
-      const prefix = row.source === 'manual' ? '✏ ' : icon;
-      const lbl = rowG.append('text')
-        .attr('x', indent).attr('y', rowH / 2 + 4)
-        .attr('font-size', row.level === 1 ? '12px' : '11px')
-        .attr('font-weight', row.level <= 2 ? '600' : '400')
-        .attr('class', 'tl-task-text')
-        .text(prefix + labelText);
-      if (row.isSummary && row.id != null)
-        lbl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
+    // Task name label — placed at bar left edge, x updated on scroll to stay visible
+    if (!row.isMilestone && row.bstart && row.bend) {
+      const bx1 = Math.max(0, xScale(row.bstart));
+      const bx2 = Math.min(chartW, xScale(row.bend));
+      if (bx2 > bx1) {
+        const labelText = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
+        const icon   = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
+        const prefix = row.source === 'manual' ? '✏ ' : icon;
+        const lbl = rowG.append('text')
+          .attr('class', 'tl-task-text tl-lbl-text')
+          .attr('data-bar-x1', bx1)
+          .attr('data-bar-x2', bx2)
+          .attr('x', bx1 + 4)
+          .attr('y', rowH / 2 + 4)
+          .attr('font-size', row.level === 1 ? '12px' : '11px')
+          .attr('font-weight', row.level <= 2 ? '600' : '400')
+          .text(prefix + labelText);
+        if (row.isSummary && row.id != null)
+          lbl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
+      }
     }
 
     if (row.isMilestone) {
@@ -1776,6 +1782,25 @@ function drawTimeline() {
       .attr('text-anchor', 'end')
       .text('✕').on('click', () => { state.timelineItems.splice(origIdx, 1); saveStorage(); renderTimeline(); });
   });
+
+  // Scroll-following label position update
+  if (chartEl._tlLabelScrollHandler) {
+    chartEl.removeEventListener('scroll', chartEl._tlLabelScrollHandler);
+  }
+  function updateTLLabels() {
+    const sl = chartEl.scrollLeft;
+    const vw = chartEl.clientWidth;
+    chartEl.querySelectorAll('.tl-lbl-text').forEach(el => {
+      const bx1 = +el.getAttribute('data-bar-x1');
+      const bx2 = +el.getAttribute('data-bar-x2');
+      if (bx2 <= sl || bx1 >= sl + vw) { el.setAttribute('visibility', 'hidden'); return; }
+      el.setAttribute('visibility', 'visible');
+      el.setAttribute('x', Math.min(Math.max(bx1, sl) + 4, bx2 - 20));
+    });
+  }
+  chartEl._tlLabelScrollHandler = updateTLLabels;
+  chartEl.addEventListener('scroll', updateTLLabels);
+  updateTLLabels();
 }
 
 // Timeline item modal
