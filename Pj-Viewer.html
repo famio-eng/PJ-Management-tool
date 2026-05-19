@@ -2789,9 +2789,9 @@ function drawGantt() {
     const isSummary = task.isSummary;
     const isCollapsed = state.collapsedRows.has(task.id);
     const indent = {1:'il1',2:'il2',3:'il3'}[task.level] || 'il4';
-    // Bug ④: show toggle only when next visible task has higher outline level
-    const nextTask = visibleTasks[taskIdx + 1];
-    const hasChildren = nextTask && nextTask.level > task.level;
+    const hasChildren = task.wbs
+      ? state.tasks.some(c => c.wbs && c.wbs.startsWith(task.wbs + '.'))
+      : false;
     L += `<tr class="${isCP?'cp-row':''}${isSummary?' gantt-summary-row':''}" data-task-id="${task.id}">`;
     fixedCols.forEach(c => {
       let val = '';
