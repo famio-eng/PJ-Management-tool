@@ -3965,6 +3965,13 @@ function applySettings() {
     try { html = buildTLTaskListHTML(); } catch(e) { html = ''; }
     tlList.innerHTML = html;
   }
+  // Auto-fit gantt fixed columns when gantt columns changed (removes blank space)
+  if (view === 'gantt') {
+    requestAnimationFrame(() => {
+      const autoFitBtn = document.querySelector('.gantt-auto-fit-btn');
+      if (autoFitBtn) autoFitBtn.click();
+    });
+  }
   showToast('✅ 設定を保存しました');
 }
 
