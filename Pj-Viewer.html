@@ -1691,6 +1691,25 @@ function drawTimeline() {
     rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', chartW).attr('height', rowH)
       .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
 
+    // Task name label — same SVG as bars, so scrolls together horizontally
+    {
+      const labelW = 160;
+      rowG.append('rect').attr('x', 0).attr('y', 0).attr('width', labelW).attr('height', rowH)
+        .attr('class', i % 2 === 0 ? 'tl-row-even' : 'tl-row-odd');
+      const indent = row.level === 1 ? 4 : row.level === 2 ? 14 : 22;
+      const labelText = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
+      const icon   = row.isSummary ? (row.isExpanded ? '▼ ' : '▶ ') : '';
+      const prefix = row.source === 'manual' ? '✏ ' : icon;
+      const lbl = rowG.append('text')
+        .attr('x', indent).attr('y', rowH / 2 + 4)
+        .attr('font-size', row.level === 1 ? '12px' : '11px')
+        .attr('font-weight', row.level <= 2 ? '600' : '400')
+        .attr('class', 'tl-task-text')
+        .text(prefix + labelText);
+      if (row.isSummary && row.id != null)
+        lbl.style('cursor', 'pointer').on('click', () => toggleTLExpand(row.id));
+    }
+
     if (row.isMilestone) {
       const mx = xScale(row.bstart);
       if (mx >= 0 && mx <= chartW) {
