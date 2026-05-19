@@ -1393,16 +1393,24 @@ function buildTLTaskListHTML() {
     return true;
   }
 
+  // Reflect pj_visible_columns setting for optional columns
+  const visibleCols = getVisibleColumns();
+  const showBstart   = visibleCols.includes('基準開始日');
+  const showBend     = visibleCols.includes('基準終了日');
+  const showResource = visibleCols.includes('リソース名');
+  const showStatus   = visibleCols.includes('状況');
+  const hide = v => v ? '' : 'display:none';
+
   let html = `<table style="width:100%;border-collapse:collapse;font-size:11px">
     <thead><tr style="background:#f0f4fa;position:sticky;top:0;z-index:1">
       <th style="width:28px;padding:4px 6px;text-align:center">
         <input type="checkbox" id="tl-chk-all" ${allChecked ? 'checked' : ''} onchange="toggleAllTLTasks(this.checked)">
       </th>
       <th style="text-align:left;padding:4px 6px">タスク名</th>
-      <th style="width:82px;padding:4px 6px">基準開始</th>
-      <th style="width:82px;padding:4px 6px">基準終了</th>
-      <th style="width:64px;padding:4px 6px">担当</th>
-      <th style="width:64px;padding:4px 6px">ステータス</th>
+      <th style="width:82px;padding:4px 6px;${hide(showBstart)}">基準開始</th>
+      <th style="width:82px;padding:4px 6px;${hide(showBend)}">基準終了</th>
+      <th style="width:64px;padding:4px 6px;${hide(showResource)}">担当</th>
+      <th style="width:64px;padding:4px 6px;${hide(showStatus)}">ステータス</th>
     </tr></thead><tbody>`;
 
   activeTasks.forEach(t => {
@@ -1422,10 +1430,10 @@ function buildTLTaskListHTML() {
         <input type="checkbox" data-tid="${t.id}" ${checked ? 'checked' : ''} onchange="toggleTLTask(${t.id},this.checked)">
       </td>
       <td style="padding:3px 6px 3px ${6 + indent}px;font-weight:${bold ? '600' : '400'}${isCritical ? ';color:#e53935' : ''}">${toggleIcon}${isCritical ? '🔴 ' : ''}${name}</td>
-      <td style="padding:3px 6px">${formatDate(t.bstart, '')}</td>
-      <td style="padding:3px 6px">${formatDate(t.bend, '')}</td>
-      <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.resource || ''}</td>
-      <td style="padding:3px 6px">${t.status || ''}</td>
+      <td style="padding:3px 6px;${hide(showBstart)}">${formatDate(t.bstart, '')}</td>
+      <td style="padding:3px 6px;${hide(showBend)}">${formatDate(t.bend, '')}</td>
+      <td style="padding:3px 6px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${hide(showResource)}">${t.resource || ''}</td>
+      <td style="padding:3px 6px;${hide(showStatus)}">${t.status || ''}</td>
     </tr>`;
   });
 
@@ -1562,8 +1570,8 @@ function renderTimeline() {
   requestAnimationFrame(() => {
     const tlTbl = document.querySelector('#tl-task-list table');
     if (tlTbl) applyColResize(tlTbl, 'timeline');
-    initTLVerticalSplit();
-    initTimelineResizeObserver();
+    initTimelineResizeObserver(); // must run first to set container height
+    initTLVerticalSplit();        // then apply ratio based on set height
     initTimelineWheelSync();
   });
 }
@@ -3804,12 +3812,25 @@ function switchSettingsTab(tab) {
 
 function renderVisibleColumnsTab() {
   const visible = getVisibleColumns();
-  const grid = document.getElementById('col-checkbox-grid');
-  if (!grid) return;
-  grid.innerHTML = ALL_COLUMNS.map(col => `
+  // Use ALL_COLUMNS if available, fall back to hardcoded list
+  const cols = (typeof ALL_COLUMNS !== 'undefined' && ALL_COLUMNS.length)
+    ? ALL_COLUMNS
+    : ['ID','WBS番号','アウトラインレベル','タスク名','Note','期間',
+       '開始日','終了日','基準開始日','基準終了日','実績開始日','実績終了日',
+       '残存期間','先行タスク','後続タスク','リソース名','達成率','状況','成果物',
+       'クリティカル','アクティブ','進捗状況'];
+  let grid = document.getElementById('col-checkbox-grid');
+  if (!grid) {
+    // If modal not yet in DOM, try to find it inside the overlay
+    const overlay = document.getElementById('settings-modal');
+    if (!overlay) return;
+    grid = overlay.querySelector('[id="col-checkbox-grid"]') || overlay.querySelector('.col-checkbox-grid');
+    if (!grid) return;
+  }
+  grid.innerHTML = cols.map(col => `
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-      <input type="checkbox" class="vcol-cb" value="${col}" ${visible.includes(col) ? 'checked' : ''}>
-      ${col}
+      <input type="checkbox" class="vcol-cb" value="${escHtml(col)}" ${visible.includes(col) ? 'checked' : ''}>
+      ${escHtml(col)}
     </label>`).join('');
 }
 
@@ -3866,6 +3887,9 @@ function applySettings() {
   computeAllStatuses();
   closeModal('settings-modal');
   renderScreen();
+  // Also refresh timeline task list if currently visible
+  const tlList = document.getElementById('tl-task-list');
+  if (tlList) tlList.innerHTML = buildTLTaskListHTML();
   showToast('✅ 設定を保存しました');
 }
 
@@ -4094,13 +4118,12 @@ function initTLVerticalSplit() {
   if (!handle || !upper || !lower || !container) return;
 
   const savedRatio = parseFloat(localStorage.getItem('pj_timeline_split_ratio') || '0.45');
+  // Use percentage so no dependency on offsetHeight at call time
   function applyRatio(r) {
-    const h = container.offsetHeight;
-    upper.style.height = Math.round(h * r) + 'px';
+    upper.style.height = (r * 100) + '%';
     upper.style.flex = 'none';
   }
-  // Apply after layout is done
-  requestAnimationFrame(() => applyRatio(savedRatio));
+  applyRatio(savedRatio); // apply immediately, no nested rAF needed
 
   let dragging = false, startY = 0, startUpperH = 0;
   handle.addEventListener('mousedown', e => {
@@ -4114,10 +4137,11 @@ function initTLVerticalSplit() {
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
     const containerH = container.offsetHeight;
+    if (!containerH) return;
     const dy = e.clientY - startY;
     const newH = Math.max(60, Math.min(containerH - 60, startUpperH + dy));
     const ratio = newH / containerH;
-    upper.style.height = newH + 'px';
+    upper.style.height = (ratio * 100) + '%';
     try { localStorage.setItem('pj_timeline_split_ratio', ratio.toString()); } catch(_) {}
   });
   document.addEventListener('mouseup', () => {
