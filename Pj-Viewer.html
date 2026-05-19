@@ -3144,16 +3144,28 @@ function renderDept() {
     `<div class="dept-tab${d === dept ? ' active' : ''}" onclick="setDeptTab('${d}')">${d}</div>`
   ).join('');
 
-  // Column visibility (pj_visible_columns_dept)
-  const deptCols  = getViewColumns('dept');
-  const showWBS    = deptCols.includes('WBS');
-  const showBstart = deptCols.includes('基準開始');
-  const showBend   = deptCols.includes('基準終了');
-  const showPct    = deptCols.includes('達成率');
-  const showStart  = deptCols.includes('予測開始');
-  const showEnd    = deptCols.includes('予測終了');
-  const showStatus = deptCols.includes('ステータス');
-  const hd = v => v ? '' : 'display:none';
+  // Column visibility from pj_visible_columns_dept — driven by DEPT_COL_DEFS
+  const deptCols = getViewColumns('dept');
+  const hd = v => v ? '' : 'display:none;width:0;padding:0;border:0;overflow:hidden';
+
+  // Cell value generator per DEPT_COL_DEFS key
+  function cellVal(col, t) {
+    switch (col.key) {
+      case 'wbs':    return `<span style="font-size:10px;color:#888">${t.wbs}</span>`;
+      case 'bstart': return formatDate(t.bstart);
+      case 'bend':   return formatDate(t.bend);
+      case 'pct':    return pctBar(t.pct);
+      case 'start':  return formatDate(t.start);
+      case 'end':    return formatDate(t.end);
+      case 'status': return statusBadge(t.status);
+      default:       return '';
+    }
+  }
+
+  // Build header/cell pairs from DEPT_COL_DEFS (single source of truth)
+  const colDefs = DEPT_COL_DEFS;
+  const wbsDef  = colDefs[0]; // WBS — rendered before タスク名
+  const restDefs = colDefs.slice(1); // 基準開始〜ステータス — rendered after タスク名
 
   const rows = tasks.map(t => {
     const ck = `${t.id}_${weekKey}`;
@@ -3161,22 +3173,23 @@ function renderDept() {
     const saved = !!c.comment;
     const authorKey = `author_${dept}`;
     const savedAuthor = localStorage.getItem(authorKey) || (state.msalUser ? state.msalUser.name : '');
-    const pastCols = pastWeeks.map(wk => {
+    const pastColsHTML = pastWeeks.map(wk => {
       const pc = state.comments[`${t.id}_${wk}`] || {};
       return `<td style="font-size:10px;background:#fafafa;max-width:110px;color:#666;vertical-align:top;padding:4px">
         ${pc.comment ? `<div>${pc.comment}</div><div style="color:#aaa;font-size:9px">${pc.author||''}</div>` : '—'}
       </td>`;
     }).join('');
 
+    const wbsCell  = `<td style="${hd(deptCols.includes(wbsDef.label))}">${cellVal(wbsDef, t)}</td>`;
+    const restCells = restDefs.map(col => {
+      const s = hd(deptCols.includes(col.label)) + (col.dateStyle ? ';white-space:nowrap;font-size:11px' : '');
+      return `<td style="${s}">${cellVal(col, t)}</td>`;
+    }).join('');
+
     return `<tr>
-      <td style="font-size:10px;color:#888;${hd(showWBS)}">${t.wbs}</td>
+      ${wbsCell}
       <td>${t.name}${t.critical==='はい'?'<span class="cp-badge">CP</span>':''}</td>
-      <td style="white-space:nowrap;font-size:11px;${hd(showBstart)}">${formatDate(t.bstart)}</td>
-      <td style="white-space:nowrap;font-size:11px;${hd(showBend)}">${formatDate(t.bend)}</td>
-      <td style="${hd(showPct)}">${pctBar(t.pct)}</td>
-      <td style="white-space:nowrap;font-size:11px;${hd(showStart)}">${formatDate(t.start)}</td>
-      <td style="white-space:nowrap;font-size:11px;${hd(showEnd)}">${formatDate(t.end)}</td>
-      <td style="${hd(showStatus)}">${statusBadge(t.status)}</td>
+      ${restCells}
       <td>
         <textarea class="comment-input${saved?' saved':''}" id="dc_${t.id}"
           placeholder="進捗コメントを入力...">${c.comment||''}</textarea>
@@ -3186,9 +3199,14 @@ function renderDept() {
           style="width:90px;border:1px solid #ddd;border-radius:3px;padding:3px 5px;font-size:11px">
         <button class="btn btn-success btn-sm" style="margin-top:3px;width:90px" onclick="saveDeptComment(${t.id},'${weekKey}','${dept}')">送信</button>
       </td>
-      ${pastCols}
+      ${pastColsHTML}
     </tr>`;
   }).join('');
+
+  const wbsHeader  = `<th style="${hd(deptCols.includes(wbsDef.label))}">${wbsDef.label}</th>`;
+  const restHeaders = restDefs.map(col =>
+    `<th style="${hd(deptCols.includes(col.label))}">${col.label}</th>`
+  ).join('');
 
   document.getElementById('content').innerHTML = `
     <div class="dept-tabs">${tabsHtml}</div>
@@ -3201,11 +3219,7 @@ function renderDept() {
         <table>
           <thead>
             <tr>
-              <th style="${hd(showWBS)}">WBS</th><th>タスク名</th>
-              <th style="${hd(showBstart)}">基準開始</th><th style="${hd(showBend)}">基準終了</th>
-              <th style="${hd(showPct)}">達成率</th>
-              <th style="${hd(showStart)}">予測開始</th><th style="${hd(showEnd)}">予測終了</th>
-              <th style="${hd(showStatus)}">ステータス</th>
+              ${wbsHeader}<th>タスク名</th>${restHeaders}
               <th>進捗コメント</th><th>担当者名</th>
               ${pastWeeks.map(wk => `<th style="background:#f0f0f0;font-size:10px">${wk}<br>（過去）</th>`).join('')}
             </tr>
@@ -3841,12 +3855,24 @@ const TASK_FIELD_MAP = {
   critical:'クリティカル', active:'アクティブ', progress:'進捗状況'
 };
 
+// Dept view column definitions — single source of truth for settings modal + renderDept
+// key: task object field, label: UI display name, dateStyle: whether to apply date cell style
+const DEPT_COL_DEFS = [
+  { key: 'wbs',    label: 'WBS',       defaultOn: false },
+  { key: 'bstart', label: '基準開始',  defaultOn: true,  dateStyle: true },
+  { key: 'bend',   label: '基準終了',  defaultOn: true,  dateStyle: true },
+  { key: 'pct',    label: '達成率',    defaultOn: true },
+  { key: 'start',  label: '予測開始',  defaultOn: true,  dateStyle: true },
+  { key: 'end',    label: '予測終了',  defaultOn: true,  dateStyle: true },
+  { key: 'status', label: 'ステータス', defaultOn: true },
+];
+
 // Per-view: all columns that can be toggled (using display labels)
 const VIEW_CONTROLLABLE_COLS = {
   timeline: ['基準開始日','基準終了日','実績開始日','実績終了日','リソース名','状況'],
   gantt:    ['ID','WBS番号','担当部門','達成率','ステータス','NW図','基準開始日','基準終了日','実績開始日','実績終了日'],
   meeting:  ['状況','達成率','開始日','終了日'],
-  dept:     ['WBS','基準開始','基準終了','達成率','予測開始','予測終了','ステータス']
+  dept:     DEPT_COL_DEFS.map(c => c.label)
 };
 
 // Per-view default ON columns
@@ -3854,7 +3880,7 @@ const VIEW_DEFAULT_COLS = {
   timeline: ['基準開始日','基準終了日','リソース名','状況'],
   gantt:    ['ID','WBS番号','担当部門','達成率','ステータス','NW図','基準開始日','基準終了日','実績開始日','実績終了日'],
   meeting:  ['状況','達成率','開始日','終了日'],
-  dept:     ['基準開始','基準終了','達成率','予測開始','予測終了','ステータス']
+  dept:     DEPT_COL_DEFS.filter(c => c.defaultOn).map(c => c.label)
 };
 
 function getViewColumns(view) {
@@ -3872,6 +3898,8 @@ function saveViewColumns(view, cols) {
 // Returns columns available in actual task data for a view (Bug ②-1: dynamic from task keys)
 function getAvailableColsForView(view) {
   const all = VIEW_CONTROLLABLE_COLS[view] || [];
+  // dept/meeting cols use view-specific display names that don't map through TASK_FIELD_MAP
+  if (view === 'dept' || view === 'meeting') return all;
   if (!state.tasks.length) return all;
   const taskKeys = new Set(Object.keys(state.tasks[0]));
   // Virtual/derived cols that are always available
